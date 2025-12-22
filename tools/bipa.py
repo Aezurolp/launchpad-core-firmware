@@ -96,6 +96,7 @@ def create(source: str, target: str):
         diffs = get_diff_naive(source_data, target_data)
     else:
         diffs = get_diff_rolling(source_data, target_data)
+        patch.version = 2
     for offset, insert_bytes in diffs:
         insert = patch.inserts.add()
         insert.position = offset
@@ -118,7 +119,8 @@ def patch(source: str, patch_file: str):
 
     inserts = sorted(list(patch_msg.inserts), key=lambda ins: ins.position)
 
-    replace_mode = all((ins.position + len(ins.data)) <= len(source_data) for ins in inserts)
+    # When version==2 (created for differing sizes), apply hunks as pure inserts.
+    replace_mode = (patch_msg.version == 1) and all((ins.position + len(ins.data)) <= len(source_data) for ins in inserts)
 
     out = bytearray()
     src_pos = 0
