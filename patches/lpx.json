@@ -2,7 +2,7 @@
 	"firmware": {
 		"base_address": "0x0800c000",
 		"description": "Launchpad X Firmware v351 patches",
-		"original": "original/LPX-351.bin"
+		"original": "../original/launchpadx-firmware-351.bin"
 	},
 	"landfill": {
 		"enabled": true,

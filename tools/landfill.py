@@ -60,7 +60,8 @@ def landfill_binary(config_file):
     if 'firmware' in config:
         original_name = Path(original_file).stem
         output_file = f"{original_name}-LANDFILL.bin"
-        output_path = config_dir / output_file
+        # Write LANDFILL next to the original firmware BIN (under original/), not in patches/
+        output_path = (config_dir / original_file).parent / output_file
     else:
         output_path = config_dir / config['output']
     

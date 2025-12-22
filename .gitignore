@@ -2,3 +2,11 @@
 *.o
 *.syx
 *.mid
+/build/mk2/
+/build/lppmk3/
+/build/lpx/
+/build/lpp/
+/build/mini/
+!/build/lpp-cfw.syx
+__pycache__
+*.DS_Store

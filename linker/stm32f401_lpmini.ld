@@ -14,7 +14,7 @@ SECTIONS {
     KEEP(*(.cfw_injection_misc_1))
   } > FLASH
 
-  .blob_part2 0x0801a345 : ALIGN(1)
+  .blob_part2 0x0801a7f0 : ALIGN(1)
   {
     KEEP(*(.blob_part2))
   } > FLASH

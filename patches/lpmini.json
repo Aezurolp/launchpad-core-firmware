@@ -2,7 +2,7 @@
 	"firmware": {
 		"base_address": "0x0800c000",
 		"description": "Launchpad Mini MK3 Firmware v407 patches",
-		"original": "original/LPMiniMK3-407.bin"
+		"original": "../original/launchpadminimk3-firmware-407.bin"
 	},
 	"landfill": {
 		"enabled": true,
