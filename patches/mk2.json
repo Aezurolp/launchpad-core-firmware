@@ -1,0 +1,41 @@
+{
+	"firmware": {
+		"base_address": "0x08003400",
+		"description": "Launchpad MK2 Firmware v171 patches",
+		"original": "original/LPMK2-171.bin"
+	},
+	"landfill": {
+		"enabled": false,
+		"adresses": [],
+		"nops": []
+	},
+	"patches": [
+        {
+			"name": "App Tick",
+			"type": "call_patch",
+			"enabled": false,
+			"target_symbol": "CFW_AppTick",
+			"auto_find": {
+				"enabled": true,
+				"original_target": "0x08003d90",
+				"search_range": "0x80000000"
+			},
+			"manual_offset": "2540"
+		},
+		{
+			"name": "Midi Receive",
+			"type": "redirect_all_calls",
+			"enabled": false,
+			"target_symbol": "CFW_MIDI_RECEIVE",
+            "original_function": "0x080055a4",
+            "search_range": "0x800000"
+		},
+		{
+			"name": "Repress something",
+			"type": "nop_patch",
+			"enabled": false,
+			"address": "0x08004afe",
+			"count": 2
+		}
+    ]
+}

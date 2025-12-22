@@ -1,0 +1,46 @@
+{
+	"firmware": {
+		"base_address": "0x0800c000",
+		"description": "Launchpad Mini MK3 Firmware v407 patches",
+		"original": "original/LPMiniMK3-407.bin"
+	},
+	"landfill": {
+		"enabled": true,
+		"description": "Landfill areas to clear with 0xFF and NOP patches",
+		"adresses": [
+			{ "from": "0x08018ac2", "to": "0x0801a344" }
+		],
+		"nops": [
+			{ "address": "0x0800cdfe", "count": 4 },
+			{ "address": "0x0800ce06", "count": 2 }
+		]
+	},
+	"patches": [
+		{
+			"name": "app_tick_hook",
+			"type": "call_patch",
+			"enabled": true,
+			"target_symbol": "CFW_AppTick",
+			"auto_find": {
+				"enabled": true,
+				"original_target": "0x0800e98e",
+				"search_range": "0x800000"
+			},
+			"manual_offset": null
+		},
+		{
+			"name": "midi_register_hook",
+			"type": "redirect_all_calls",
+			"enabled": true,
+			"target_symbol": "CFW_RegPort_Replacement",
+            "original_function": "0x0800ec32",
+            "search_range": "0x80000"
+		},
+		{
+			"name": "Version Tag",
+			"type": "raw_patch",
+			"offset": "0x1fb",
+			"data": "393939"
+		}
+	]
+}

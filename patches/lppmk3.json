@@ -1,0 +1,65 @@
+{
+	"firmware": {
+		"base_address": "0x08010000",
+		"description": "Launchpad Pro MK3 Firmware v385 patches",
+		"original": "original/LPPMK3-385.bin"
+	},
+	"landfill": {
+		"enabled": false,
+		"addresses": [],
+		"nops": []
+	},
+	"patches": [
+		{
+			"name": "App Tick Hook",
+			"type": "call_patch",
+			"enabled": true,
+			"target_symbol": "CFW_AppTick",
+			"auto_find": {
+				"enabled": true,
+				"original_target": "0x08015244",
+				"search_range": "0x800000"
+			},
+			"manual_offset": "366274"
+		},
+		{
+			"name": "Midi Callback",
+			"type": "redirect_all_calls",
+			"enabled": true,
+			"target_symbol": "CFW_MIDI_RECEIVE",
+            "original_function": "0x08029924",
+            "search_range": "0x80000000"
+		},
+		{
+			"name": "Protest.bin while loop NOPs",
+			"type": "replace_bytes_patch",
+			"enabled": true,
+			"replacement": "0046",
+			"description": "Replace instructions with mov r0, r0 (NOP) - while loop disabled in Binary Ninja",
+			"addresses": [
+				"0x080696CA", "0x080696CC", "0x080696D0", "0x080696D6", "0x080696D8", "0x080696DA",
+				"0x080696DC", "0x080696E2", "0x080696E4", "0x080696EE", "0x080696F0", "0x080696F6",
+				"0x080696FE", "0x08069700", "0x08069702", "0x08069704", "0x08069708", "0x0806970A",
+				"0x0806970C", "0x08069726", "0x08069728", "0x0806972A", "0x08069732", "0x08069734",
+				"0x08069738", "0x0806973A", "0x0806973E", "0x08069744", "0x08069746", "0x08069748",
+				"0x0806974A", "0x08069750", "0x08069752", "0x08069754", "0x08069756", "0x08069760",
+				"0x08069762", "0x08069764", "0x0806976A", "0x0806976C", "0x0806976E", "0x08069772",
+				"0x08069780", "0x08069782", "0x08069784", "0x0806978A", "0x0806978C", "0x0806978E",
+				"0x0806979C", "0x0806979E", "0x080697A0", "0x080697A6", "0x080697A8", "0x080697AA",
+				"0x080697B0", "0x080697B2", "0x080697BE", "0x080697C0", "0x080697C4", "0x080697C6",
+				"0x080697C8", "0x080697CA", "0x080697CC", "0x080697D2", "0x080697D8", "0x080697DA",
+				"0x080697E0", "0x080697E2", "0x080697F0", "0x080697F2", "0x08069800", "0x08069802",
+				"0x0806980C", "0x0806980E", "0x08069812", "0x08069814", "0x08069816", "0x08069818",
+				"0x0806981C", "0x0806981E", "0x08069820", "0x08069822"
+			]
+		},
+		{
+			"name": "Skip boot animation",
+			"type": "replace_bytes_patch",
+			"enabled": true,
+			"replacement": "c3d0",
+			"description": "Invert branch from BNE to BEQ at 0x08069CCA (if condition inverted)",
+			"addresses": ["0x08069CCA"]
+		}
+	]
+}
