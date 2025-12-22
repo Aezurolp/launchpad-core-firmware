@@ -46,8 +46,6 @@ I am genuinely open to collaboration. If Novation is interested, I’m happy to 
 
 - [Kaskobi](https://youtube.com/@kaskobi) for creating the individual boot animations for all launchpads
 
---------
-
 The creation of this project was inspired by:
 
 - [Gabriel Valky (gabonator)](https://github.com/gabonator)
