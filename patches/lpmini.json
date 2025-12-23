@@ -12,7 +12,10 @@
 		],
 		"nops": [
 			{ "address": "0x0800cdfe", "count": 4 },
-			{ "address": "0x0800ce06", "count": 2 }
+			{ "address": "0x0800ce06", "count": 2 },
+			{ "address": "0x0800cdfe", "count": 4 },
+			{ "address": "0x0800ce06", "count": 2 },
+			{ "address": "0x0800ce14", "count": 4 }
 		]
 	},
 	"patches": [

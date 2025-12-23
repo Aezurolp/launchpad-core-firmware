@@ -60,6 +60,20 @@
 			"replacement": "c3d0",
 			"description": "Invert branch from BNE to BEQ at 0x08069CCA (if condition inverted)",
 			"addresses": ["0x08069CCA"]
+		},
+		{
+			"name": "Kill onboarding drive",
+			"type": "nop_patch",
+			"enabled": false,
+			"address": "0x08062692",
+			"count": 12
+		},
+		{
+			"name": "Kill onboarding drive",
+			"type": "nop_patch",
+			"enabled": false,
+			"address": "0x0806265a",
+			"count": 12
 		}
 	]
 }

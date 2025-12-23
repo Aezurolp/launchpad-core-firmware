@@ -81,7 +81,7 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
 
         if (write_mode) { // Write
             for (uint8_t i = 0; i < 128; i++) {
-                if (palette_index <= 3) {
+                if (palette_index < 3) {
                     settings_custom_palette[palette_index][color_space][i] = buf[5 + i];
                 } else {
                     temporary_palette[color_space][i] = buf[5 + i];

@@ -29,8 +29,8 @@ ifeq ($(DEVICE),lpx)
   OFF_FREE_START=$(shell printf %d $$(( $(LPX_FREE_START) - $(LPX_BASE) )))
   OFF_AFTER_FREE_END=$(shell printf %d $$(( $(LPX_FREE_END) - $(LPX_BASE) + 1 )))
 else ifeq ($(DEVICE),mini)
-	CFLAGS+=-DLPMINI
-	LDFLAGS=-nostdlib -Wl,--gc-sections -T linker/stm32f401_lpmini.ld
+	CFLAGS+=-DLPMINI -fno-common
+	LDFLAGS=-Wl,--gc-sections -Wl,-Map=build/mini/fw.map -T linker/stm32f401_lpmini.ld
 	DRIVER_SRC=src/driver/mini/mini_hooks.c \
 			  src/driver/mini/mini_boot.c \
 			  src/driver/mini/mini_velocity_stubs.c \

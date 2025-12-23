@@ -27,6 +27,10 @@
 #define CB_PTRS32       ((volatile uint32_t*)0x20007508u)
 #define CB_TYPE_BYTES   ((volatile uint8_t *)0x2000750cu)
 
+#define FW_TICK_ADDR 0x0800E98Eu
+typedef int32_t (*fw_tick_fn)(int32_t, int32_t, int32_t, int32_t);
+#define FW_TICK  ((fw_tick_fn)(FW_TICK_ADDR | 1u))
+
 typedef void (*set_led_fn)(uint32_t index, uint32_t rgb);
 typedef void (*midi_cb_t)(uint8_t port, uint8_t st, uint8_t d1, uint8_t d2);
 typedef void (*sysex_cb_t)(void* cookie, const uint8_t* buf, uint32_t len);
@@ -85,12 +89,13 @@ void* CFW_RegPort_Replacement(
 uint8_t initialized = 0;
 
 __attribute__((section(".cfw_keep")))
-void CFW_AppTick() {
+void CFW_AppTick(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4) {
     if (!initialized) {
         initialized = 1;
         init_buttons();
         app_init();
     }
+    FW_TICK(arg1, arg2, arg3, arg4);
     app_timer_event();
 }
 

@@ -41,6 +41,31 @@ static const uint8_t selectable_modes[MODES][2] = {
 
 uint8_t page = 0;
 
+// Rainbow animation state for the custom palette indicator (LED 25)
+static uint8_t palette_rainbow_hue = 0;
+static uint8_t palette_rainbow_tick = 0; // rate divider to control speed
+
+// Simple color wheel: maps 0..255 to 0xRRGGBB
+static inline uint32_t wheel(uint8_t pos) {
+    uint8_t r, g, b;
+    if (pos < 85) {
+        r = (uint8_t)(255 - pos * 3);
+        g = (uint8_t)(pos * 3);
+        b = 0;
+    } else if (pos < 170) {
+        pos = (uint8_t)(pos - 85);
+        r = 0;
+        g = (uint8_t)(255 - pos * 3);
+        b = (uint8_t)(pos * 3);
+    } else {
+        pos = (uint8_t)(pos - 170);
+        r = (uint8_t)(pos * 3);
+        g = 0;
+        b = (uint8_t)(255 - pos * 3);
+    }
+    return (uint32_t)((r << 16) | (g << 8) | b);
+}
+
 void setup_init() {
     if (page > PAGES) page = 0;
 
@@ -65,19 +90,22 @@ void setup_init() {
             set_led(selectable_modes[i][0], (mode == selectable_modes[i][1]) ? modes[selectable_modes[i][1]].color : modes[selectable_modes[i][1]].color_dimmed);
         }
 
-        if (settings_palette < 3) {
-            set_led(35, 0x00);
+        // Custom palette indicator (LED 25): off for system palettes, rainbow for custom
+        if (settings_palette < 4) {
+            set_led(25, 0x000000);
         } else {
-            set_led(35, 0xccff00);
+            set_led(25, wheel(palette_rainbow_hue));
         }
 
         for (uint8_t i = 0; i < 3; i++) { // Custom Palettes
-            set_led(36 + i, (settings_palette == 3 + i)? 0x6060FF : 0x080840);
+            set_led(26 + i, (settings_palette == 4 + i)? 0x70EEFF : 0x106080);
         }
 
-        for (uint8_t i = 0; i < 3; i++) { // System Palettes
-            set_led(26 + i, (settings_palette == i)? 0x6060FF : 0x101090);
+        for (uint8_t i = 0; i < 4; i++) { // System Palettes
+            set_led(15 + i, (settings_palette == i)? 0x6060FF : 0x101090);
         }
+
+        set_led(18, settings_palette == 3 ? 0xFFCC80 : 0x906010);
     } else if (page == 1) {
         uint8_t brightness = driver_get_brightness();
 
@@ -117,7 +145,17 @@ void setup_init() {
     }
 }
 
-void setup_timer_event() { }
+void setup_timer_event() {
+    // Animate LED 25 only on CFW page when a custom palette is selected
+    if (page == 0 && settings_palette >= 4) {
+        // Slow down animation by updating every few ticks
+        if (++palette_rainbow_tick >= 6) { // adjust for desired speed
+            palette_rainbow_tick = 0;
+            palette_rainbow_hue++;
+            set_led(25, wheel(palette_rainbow_hue));
+        }
+    }
+}
 
 void setup_surface_event(uint8_t type, uint8_t index, uint8_t value) {
     if (type != 1) return;
@@ -147,12 +185,12 @@ void setup_surface_event(uint8_t type, uint8_t index, uint8_t value) {
             }
         }
 
-        if (index >= 36 && index <= 38) { // Custom Palettes
-            settings_palette = index - 36 + 3;
+        if (index >= 26 && index <= 28) { // Custom Palettes
+            settings_palette = index - 26 + 4;
             setup_init();
             return;
-        } else if (index >= 26 && index <= 28) { // System Palettes
-            settings_palette = index - 26;
+        } else if (index >= 15 && index <= 18) { // System Palettes
+            settings_palette = index - 15;
             setup_init();
             return;
         }
