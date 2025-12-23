@@ -3,6 +3,7 @@ import zlib
 import argparse
 from typing import List, Optional, Dict
 import bipa_pb2
+import difflib
 
 def get_diff_naive(source: bytes, target: bytes) -> list[tuple[int, bytes]]:
     inserts: list[tuple[int, bytes]] = []
@@ -30,6 +31,9 @@ def get_diff_naive(source: bytes, target: bytes) -> list[tuple[int, bytes]]:
 def get_diff_rolling(source: bytes, target: bytes, window: int = 32) -> list[tuple[int, bytes]]:
     if window <= 0:
         raise ValueError("window must be > 0")
+    
+    min_win = 4
+    window = max(min_win, min(window, len(source), len(target)))
     inserts: list[tuple[int, bytes]] = []
     s_len = len(source)
     t_len = len(target)
@@ -79,6 +83,23 @@ def get_diff_rolling(source: bytes, target: bytes, window: int = 32) -> list[tup
         inserts.append((pending_start if pending_start is not None else t_len - len(pending), bytes(pending)))
     return inserts
 
+MAGIC_V3 = 0xFF
+
+def _encode_v3_hunk(mode: int, consume_len: int, payload: bytes) -> bytes:
+    if mode not in (0, 1):
+        raise ValueError("mode must be 0 (insert) or 1 (replace)")
+    if consume_len < 0 or consume_len > 0xFFFF:
+        raise ValueError("consume_len must be in [0, 65535]")
+    return bytes([MAGIC_V3, mode, (consume_len >> 8) & 0xFF, consume_len & 0xFF]) + payload
+
+def _decode_v3_hunk(data: bytes) -> tuple[int, int, bytes]:
+    if len(data) >= 4 and data[0] == MAGIC_V3:
+        mode = data[1]
+        consume_len = (data[2] << 8) | data[3]
+        return mode, consume_len, data[4:]
+    
+    return 0, 0, data
+
 def create(source: str, target: str):
     patch = bipa_pb2.Patch()
     patch.version = 1
@@ -94,13 +115,37 @@ def create(source: str, target: str):
 
     if len(source_data) == len(target_data):
         diffs = get_diff_naive(source_data, target_data)
+        patch.version = 1
+        for offset, insert_bytes in diffs:
+            insert = patch.inserts.add()
+            insert.position = offset
+            insert.data = insert_bytes
     else:
-        diffs = get_diff_rolling(source_data, target_data)
-        patch.version = 2
-    for offset, insert_bytes in diffs:
-        insert = patch.inserts.add()
-        insert.position = offset
-        insert.data = insert_bytes
+        patch.version = 3
+        sm = difflib.SequenceMatcher(None, source_data, target_data, autojunk=False)
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag == 'equal':
+                continue
+            elif tag == 'insert':
+                payload = target_data[j1:j2]
+                enc = _encode_v3_hunk(0, 0, payload)
+                ins = patch.inserts.add()
+                ins.position = i1
+                ins.data = enc
+            elif tag == 'replace':
+                consume = i2 - i1
+                payload = target_data[j1:j2]
+                enc = _encode_v3_hunk(1, consume, payload)
+                ins = patch.inserts.add()
+                ins.position = i1
+                ins.data = enc
+            elif tag == 'delete':
+                # Deletions are represented as replace with empty payload
+                consume = i2 - i1
+                enc = _encode_v3_hunk(1, consume, b"")
+                ins = patch.inserts.add()
+                ins.position = i1
+                ins.data = enc
 
     with open(f"{target}.bipa", "wb") as f:
         f.write(patch.SerializeToString())
@@ -119,32 +164,51 @@ def patch(source: str, patch_file: str):
 
     inserts = sorted(list(patch_msg.inserts), key=lambda ins: ins.position)
 
-    # When version==2 (created for differing sizes), apply hunks as pure inserts.
-    replace_mode = (patch_msg.version == 1) and all((ins.position + len(ins.data)) <= len(source_data) for ins in inserts)
-
     out = bytearray()
     src_pos = 0
-    out_pos = 0
 
-    for ins in inserts:
-        pos = ins.position
-        data = ins.data
-
-        if pos < out_pos:
-            raise ValueError(f"Patch hunks overlap or are out of order at position {pos}")
-
-        while out_pos < pos and src_pos < len(source_data):
-            out.append(source_data[src_pos])
-            src_pos += 1
-            out_pos += 1
-
-        out.extend(data)
-        out_pos += len(data)
-        if replace_mode:
-            src_pos += len(data)
-
-    if src_pos < len(source_data):
-        out.extend(source_data[src_pos:])
+    if patch_msg.version in (1, 2):
+        replace_mode = (patch_msg.version == 1) and all((ins.position + len(ins.data)) <= len(source_data) for ins in inserts)
+        out_pos = 0
+        delta = 0
+        for ins in inserts:
+            pos_t = ins.position
+            data = ins.data
+            pos_s = pos_t if replace_mode else (pos_t - delta)
+            if pos_s < src_pos:
+                raise ValueError(f"Patch hunks overlap or are out of order at target position {pos_t} (source pos {pos_s}, current {src_pos})")
+            while src_pos < pos_s and src_pos < len(source_data):
+                out.append(source_data[src_pos])
+                src_pos += 1
+                out_pos += 1
+            out.extend(data)
+            out_pos += len(data)
+            if replace_mode:
+                src_pos += len(data)
+            else:
+                delta = out_pos - src_pos
+        if src_pos < len(source_data):
+            out.extend(source_data[src_pos:])
+    elif patch_msg.version == 3:
+        # Positions are in source coordinates; per-hunk mode encoded in data
+        for ins in inserts:
+            pos_s = ins.position
+            mode, consume_len, payload = _decode_v3_hunk(ins.data)
+            if pos_s < src_pos:
+                raise ValueError(f"V3 patch hunks overlap at source position {pos_s} (current {src_pos})")
+            
+            if src_pos < pos_s:
+                out.extend(source_data[src_pos:pos_s])
+                src_pos = pos_s
+        
+            out.extend(payload)
+            if mode == 1:
+                src_pos += consume_len
+            
+        if src_pos < len(source_data):
+            out.extend(source_data[src_pos:])
+    else:
+        raise ValueError(f"Unsupported patch version: {patch_msg.version}")
 
     if patch_file.endswith(".bipa"):
         out_path = patch_file[:-5]
