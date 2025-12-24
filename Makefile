@@ -58,6 +58,7 @@ else ifeq ($(DEVICE),lppmk3)
 	DRIVER_SRC=src/driver/lppmk3/lppmk3_hooks.c \
 			src/driver/lppmk3/lppmk3_boot.c \
 			src/driver/lppmk3/lppmk3_leds.c \
+			src/driver/lppmk3/lppmk3_storage.c \
 			src/driver/lppmk3/lppmk3_driver.c
 	BLOB_OBJ=libs/lppmk3_blob.o
 	VERSION=385
@@ -92,6 +93,8 @@ else ifeq ($(DEVICE),lpp)
 		-specs=nano.specs -specs=nosys.specs -nostdlib -Wl,-static -N -nostartfiles -Wl,--gc-sections
 	DRIVER_SRC=src/driver/lpp/lpp_app.c \
 			src/driver/lpp/lpp_boot.c \
+			src/driver/lpp/lpp_leds.c \
+			src/driver/lpp/lpp_storage.c \
 			src/driver/lpp/lpp_driver.c
 	LIB_OBJ=libs/lpp.a
 	BLOB_OBJ=

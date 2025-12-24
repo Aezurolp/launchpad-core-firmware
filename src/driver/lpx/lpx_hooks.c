@@ -40,6 +40,10 @@ static uint8_t  g_type_hooked[3] = {0,0,0};
 #define SET_LED   ((set_led_fn)(SET_LED_ADDR | 1u))
 #define ORIG_SCAN ((scan_buttons_fn)(SCAN_ADDR | 1u))
 
+#define FW_TICK_ADDR 0x0800E2AEu
+typedef int32_t (*fw_tick_fn)(int32_t, int32_t, int32_t, int32_t);
+#define FW_TICK  ((fw_tick_fn)(FW_TICK_ADDR | 1u))
+
 __attribute__((section(".cfw_keep")))
 static void CFW_Midi_CB(uint8_t port, uint8_t st, uint8_t d1, uint8_t d2){
     app_midi_event(port, st, d1, d2);
@@ -170,7 +174,7 @@ void init_buttons() {
 static uint8_t initialized = 0;
 
 __attribute__((section(".cfw_keep")))
-void CFW_AppTick() {
+void CFW_AppTick(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4) {
     if (!initialized) {
         initialized = 1;
         init_buttons();
@@ -178,6 +182,7 @@ void CFW_AppTick() {
         app_init();
     }
 
+    FW_TICK(arg1, arg2, arg3, arg4);
     app_timer_event();
 }
 

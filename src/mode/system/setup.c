@@ -41,11 +41,9 @@ static const uint8_t selectable_modes[MODES][2] = {
 
 uint8_t page = 0;
 
-// Rainbow animation state for the custom palette indicator (LED 25)
 static uint8_t palette_rainbow_hue = 0;
-static uint8_t palette_rainbow_tick = 0; // rate divider to control speed
+static uint8_t palette_rainbow_tick = 0;
 
-// Simple color wheel: maps 0..255 to 0xRRGGBB
 static inline uint32_t wheel(uint8_t pos) {
     uint8_t r, g, b;
     if (pos < 85) {
@@ -146,10 +144,8 @@ void setup_init() {
 }
 
 void setup_timer_event() {
-    // Animate LED 25 only on CFW page when a custom palette is selected
     if (page == 0 && settings_palette >= 4) {
-        // Slow down animation by updating every few ticks
-        if (++palette_rainbow_tick >= 6) { // adjust for desired speed
+        if (++palette_rainbow_tick >= 6) {
             palette_rainbow_tick = 0;
             palette_rainbow_hue++;
             set_led(25, wheel(palette_rainbow_hue));
