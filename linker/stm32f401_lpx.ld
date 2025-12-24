@@ -49,5 +49,5 @@ SECTIONS {
   _estack = ORIGIN(RAM) + LENGTH(RAM);
 
   __cfw_ram_end = ORIGIN(CFW_RAM) + LENGTH(CFW_RAM);
-  ASSERT(_ecfw_bss <= __cfw_ram_end, "CFW_RAM overflow (reduce .cfw_bss or enlarge CFW_RAM)")
+  ASSERT(_ecfw_bss <= __cfw_ram_end, "CFW_RAM overflow!")
 }

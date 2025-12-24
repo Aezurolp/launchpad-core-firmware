@@ -32,11 +32,9 @@ SECTIONS {
     KEEP(*(.cfw_rodata*))
   } > FLASH
 
-  /* leave normal data/bss exactly as before */
   .data : { *(.data*) } > RAM AT > FLASH
   .bss  : { *(.bss*) *(COMMON) } > RAM
 
-  /* move ONLY cfw_bss away from OFW RAM */
   . = ALIGN(16);
   .cfw_bss (NOLOAD) : ALIGN(16) {
     *(.cfw_bss*)
@@ -51,5 +49,5 @@ SECTIONS {
   _estack = ORIGIN(RAM) + LENGTH(RAM);
 
   __cfw_ram_end = ORIGIN(CFW_RAM) + LENGTH(CFW_RAM);
-  ASSERT(_ecfw_bss <= __cfw_ram_end, "CFW_RAM overflow (reduce .cfw_bss or enlarge CFW_RAM)")
+  ASSERT(_ecfw_bss <= __cfw_ram_end, "CFW_RAM overflow!")
 }
