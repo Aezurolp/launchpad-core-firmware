@@ -1,5 +1,6 @@
 #include "utils/sysex.h"
 #include "driver/driver.h"
+#include "driver/sysconf.h"
 #include "flash/settings.h"
 #include "flash/flash.h"
 #include "utils/palette.h"
@@ -33,6 +34,23 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
         uint8_t response[DEVICE_INQUIRY_LENGTH] = DEVICE_INQUIRY_RESPONSE;
 
         driver_send_midi(1, response, DEVICE_INQUIRY_LENGTH);
+    }
+
+    // CFW Version Inquiry:
+    // Request:  F0 00 20 29 02 7F 00 F7
+    // Response: F0 00 20 29 02 7F 01 <major> <minor> <patch> F7
+    if (len >= 7 &&
+        buf[1] == 0x00 && buf[2] == 0x20 && buf[3] == 0x29 && buf[4] == 0x02 &&
+        buf[5] == 0x7F && buf[6] == 0x00) {
+        const uint8_t ver[3] = CFW_VERSION; // {major, minor, patch}
+        uint8_t resp[11] = {
+            0xF0, 0x00, 0x20, 0x29, 0x02, 0x7F, 0x01,
+            (uint8_t)(ver[0] & 0x7F), (uint8_t)(ver[1] & 0x7F), (uint8_t)(ver[2] & 0x7F),
+            0xF7
+        };
+
+        driver_send_midi(1, resp, sizeof(resp));
+        return;
     }
 
     if (buf[1] == 0x5F) {

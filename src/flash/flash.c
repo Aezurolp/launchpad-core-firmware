@@ -1,7 +1,9 @@
 #include <flash/flash.h>
 #include <driver/driver.h>
 #include <flash/settings.h>
+#include <driver/sysconf.h>
 
+__attribute__((section(".cfw_bss")))
 static uint8_t flash[1024] = {0};
 
 void flash_read() {
@@ -11,14 +13,17 @@ void flash_read() {
     settings_aftertouch_curve = 0;
     settings_aftertouch_mode = 0;
     settings_palette = 0;
+
+    if (system_conf.flash_supported) {
+        driver_read_flash(0, &flash[0], 1024);
     
-    driver_read_flash(0, &flash[0], 1024);
-    settings_brightness = flash[0];
-    settings_velocity_enabled = flash[1];
-    settings_velocity_curve = flash[2];
-    settings_aftertouch_mode = flash[3];
-    settings_aftertouch_curve = flash[4];
-    settings_palette = flash[5];
+        settings_brightness = flash[0];
+        settings_velocity_enabled = flash[1];
+        settings_velocity_curve = flash[2];
+        settings_aftertouch_mode = flash[3];
+        settings_aftertouch_curve = flash[4];
+        settings_palette = flash[5];
+    }
     
     if (settings_brightness > 7) settings_brightness = 7;
     if (settings_velocity_curve > 1) settings_velocity_curve = 0;
@@ -42,5 +47,7 @@ void flash_write() {
     flash[4] = settings_aftertouch_curve;
     flash[5] = settings_palette;
 
-    driver_write_flash(0, &flash[0], 1024);
+    if (system_conf.flash_supported) {
+        driver_write_flash(0, &flash[0], 1024);
+    }
 }

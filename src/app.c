@@ -52,7 +52,7 @@ void alt_app_surface_event(uint8_t type, uint8_t index, uint8_t value) {
 void app_surface_event(uint8_t type, uint8_t index, uint8_t value) {
 #endif
     #if defined(LPX) || defined(LPMINI) 
-    if (current_mode != MODE_SETUP) {
+    if (current_mode != MODE_SETUP && current_mode != MODE_BOOT) {
         if (type && index == 95) {
             session_button_down = 1;
         } else if (type == 0 && index == 95) {
@@ -63,7 +63,7 @@ void app_surface_event(uint8_t type, uint8_t index, uint8_t value) {
     #endif
 
     #if defined(LPPRO) || defined(LPPMK3)
-    if (current_mode != MODE_SETUP) {
+    if (current_mode != MODE_SETUP && current_mode != MODE_BOOT) {
         if (type == 1 && index == 0 && value != 0) {
             mode_switch(MODE_SETUP);
             return;

@@ -1,6 +1,7 @@
 #include "mode/system/setup.h"
 #include "mode/mode.h"
 #include "driver/driver.h"
+#include "driver/sysconf.h"
 #include "led/led.h"
 #include "flash/settings.h"
 #include "flash/flash.h"
@@ -28,8 +29,6 @@ static const uint32_t headline_leds[4][28][2] = {
 static const uint8_t selectable_modes[MODES][2] = {
     { 11, MODE_PERFORMANCE },
     { 12, MODE_PROGRAMMER },
-    // { 13, MODE_LIVE },
-    // { 14, MODE_CHORD },
 };
 
 #if defined(LPX) || defined(LPPMK3) || defined(LPPRO)
@@ -88,15 +87,16 @@ void setup_init() {
             set_led(selectable_modes[i][0], (mode == selectable_modes[i][1]) ? modes[selectable_modes[i][1]].color : modes[selectable_modes[i][1]].color_dimmed);
         }
 
-        // Custom palette indicator (LED 25): off for system palettes, rainbow for custom
-        if (settings_palette < 4) {
-            set_led(25, 0x000000);
-        } else {
-            set_led(25, wheel(palette_rainbow_hue));
-        }
+        if (system_conf.flash_supported) {
+            if (settings_palette < 4) {
+                set_led(25, 0x000000);
+            } else {
+                set_led(25, wheel(palette_rainbow_hue));
+            }
 
-        for (uint8_t i = 0; i < 3; i++) { // Custom Palettes
-            set_led(26 + i, (settings_palette == 4 + i)? 0x70EEFF : 0x106080);
+            for (uint8_t i = 0; i < 3; i++) { // Custom Palettes
+                set_led(26 + i, (settings_palette == 4 + i)? 0x70EEFF : 0x106080);
+            }
         }
 
         for (uint8_t i = 0; i < 4; i++) { // System Palettes
@@ -181,7 +181,7 @@ void setup_surface_event(uint8_t type, uint8_t index, uint8_t value) {
             }
         }
 
-        if (index >= 26 && index <= 28) { // Custom Palettes
+        if (index >= 26 && index <= 28 && system_conf.flash_supported) { // Custom Palettes
             settings_palette = index - 26 + 4;
             setup_init();
             return;

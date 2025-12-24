@@ -11,7 +11,8 @@ ifeq ($(DEVICE),lpx)
 			src/driver/lpx/lpx_leds.c \
 			src/driver/lpx/lpx_boot.c \
 			src/driver/lpx/lpx_storage.c \
-			src/driver/lpx/lpx_buttons.c
+			src/driver/lpx/lpx_buttons.c \
+			src/driver/lpx/sysconf.c
 	BLOB_SPLIT_DIR=build/lpx/blob_split
 	BLOB_PART1_OBJ=$(BLOB_SPLIT_DIR)/blob_part1.o
 	BLOB_PART2_OBJ=$(BLOB_SPLIT_DIR)/blob_part2.o
@@ -35,7 +36,8 @@ else ifeq ($(DEVICE),mini)
 			  src/driver/mini/mini_boot.c \
 			  src/driver/mini/mini_velocity_stubs.c \
 			  src/driver/mini/mini_storage.c \
-			  src/driver/mini/mini_leds.c
+			  src/driver/mini/mini_leds.c \
+			  src/driver/mini/sysconf.c
 	BLOB_SPLIT_DIR=build/mini/blob_split
 	BLOB_PART1_OBJ=$(BLOB_SPLIT_DIR)/blob_part1.o
 	BLOB_PART2_OBJ=$(BLOB_SPLIT_DIR)/blob_part2.o
@@ -59,7 +61,8 @@ else ifeq ($(DEVICE),lppmk3)
 			src/driver/lppmk3/lppmk3_boot.c \
 			src/driver/lppmk3/lppmk3_leds.c \
 			src/driver/lppmk3/lppmk3_storage.c \
-			src/driver/lppmk3/lppmk3_driver.c
+			src/driver/lppmk3/lppmk3_driver.c \
+			src/driver/lppmk3/sysconf.c
 	BLOB_OBJ=libs/lppmk3_blob.o
 	VERSION=385
 	SYSEX_TYPE=/lppmk3
@@ -95,7 +98,8 @@ else ifeq ($(DEVICE),lpp)
 			src/driver/lpp/lpp_boot.c \
 			src/driver/lpp/lpp_leds.c \
 			src/driver/lpp/lpp_storage.c \
-			src/driver/lpp/lpp_driver.c
+			src/driver/lpp/lpp_driver.c \
+			src/driver/lpp/sysconf.c
 	LIB_OBJ=libs/lpp.a
 	BLOB_OBJ=
 	VERSION=000
