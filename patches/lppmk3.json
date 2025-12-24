@@ -63,17 +63,11 @@
 		},
 		{
 			"name": "Kill onboarding drive",
-			"type": "nop_patch",
-			"enabled": false,
-			"address": "0x08062692",
-			"count": 12
-		},
-		{
-			"name": "Kill onboarding drive",
-			"type": "nop_patch",
-			"enabled": false,
-			"address": "0x0806265a",
-			"count": 12
+			"type": "replace_bytes_patch",
+			"enabled": true,
+			"replacement": "00460046",
+			"description": "Match protest.bin: two NOPs replacing call at 0x0806B4CC",
+			"addresses": ["0x0806B4CC"]
 		}
 	]
 }
