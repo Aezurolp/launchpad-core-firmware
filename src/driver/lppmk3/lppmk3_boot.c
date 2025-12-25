@@ -3213,7 +3213,7 @@ void boot_timer_event() {
         uint8_t count = boot_frames[boot_frame_index].count;
         for (uint8_t i = 0; i < count && boot_change_index < boot_change_count; ++i) {
             const boot_change_t change = boot_changes[boot_change_index++];
-            palette_led(change.led, change.velocity);
+            novation_led(change.led, change.velocity);
         }
         ++boot_frame_index;
     }

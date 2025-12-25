@@ -53,6 +53,18 @@ void rgb_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
     #endif
 }
 
+void novation_led(uint8_t led, uint8_t velocity) {
+    #if defined(LPX) || defined(LPMINI) || defined(LPPMK3)
+        driver_set_led(led, NOVATION_RGB_PAL_U32[velocity]);
+    #elif defined(LPPRO)
+        uint8_t r = native_palettes[0][0][velocity];
+        uint8_t g = native_palettes[0][1][velocity];
+        uint8_t b = native_palettes[0][2][velocity];
+
+        driver_set_led_rgb(led, r, g, b);
+    #endif
+}
+
 void palette_led(uint8_t led, uint8_t velocity) {
     #if defined(LPX) || defined(LPMINI) || defined(LPPMK3)
         if (settings_palette == 6) {
