@@ -22,7 +22,7 @@ void performance_surface_event(uint8_t type, uint8_t index, uint8_t value) {
         vel = value;
     }
 
-    driver_send_midi(1, (uint8_t[]){(uint8_t)(0x90), xy_dr[index], type ? (settings_velocity_enabled ? value : vel) : 0}, 3);
+    driver_send_midi(1, (uint8_t[]){(uint8_t)(0x90), xy_dr[index], type ? (settings_velocity_enabled ? vel : 127) : 0}, 3);
 }
 
 void performance_midi_event(uint8_t port, uint8_t status, uint8_t d1, uint8_t d2) {
