@@ -64,7 +64,7 @@
 		{
 			"name": "Kill onboarding drive",
 			"type": "replace_bytes_patch",
-			"enabled": true,
+			"enabled": false,
 			"replacement": "00460046",
 			"description": "Match protest.bin: two NOPs replacing call at 0x0806B4CC",
 			"addresses": ["0x0806B4CC"]
