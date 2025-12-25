@@ -5,12 +5,24 @@
 #include <utils/conversion.h>
 #include <flash/settings.h>
 
+uint8_t velocity_curve_high(uint8_t v);
+uint8_t velocity_curve_low(uint8_t v);
+
 void performance_init() { }
 
 void performance_timer_event() { }
 
 void performance_surface_event(uint8_t type, uint8_t index, uint8_t value) {
-    driver_send_midi(1, (uint8_t[]){(uint8_t)(0x90), xy_dr[index], type ? (settings_velocity_enabled ? value : 127) : 0}, 3);
+    uint8_t vel = 0;
+    if (settings_velocity_curve == 0) {
+        vel = velocity_curve_low(value);
+    } else if (settings_velocity_curve == 2) {
+        vel = velocity_curve_high(value);
+    } else {
+        vel = value;
+    }
+
+    driver_send_midi(1, (uint8_t[]){(uint8_t)(0x90), xy_dr[index], type ? (settings_velocity_enabled ? value : vel) : 0}, 3);
 }
 
 void performance_midi_event(uint8_t port, uint8_t status, uint8_t d1, uint8_t d2) {
@@ -49,4 +61,40 @@ void performance_aftertouch_event(uint8_t index, uint8_t value) {
     } else if (settings_aftertouch_mode == 2) {
         driver_send_midi(1, (uint8_t[]){(uint8_t)(208), xy_dr[index], value}, 3);
     }
+}
+
+uint8_t velocity_curve_low(uint8_t v)
+{
+    if (v == 0) return 0;
+    if (v > 127) v = 127;
+
+    uint16_t x = v;
+    uint16_t y = (uint16_t)((x * x + 63u) / 127u);
+    if (y > 127) y = 127;
+    return (uint8_t)y;
+}
+
+uint8_t velocity_curve_high(uint8_t v)
+{
+    if (v == 0) return 0;
+    if (v > 127) v = 127;
+
+    uint16_t n = (uint16_t)v * 127u;
+
+    uint16_t res = 0;
+    uint16_t bit = 1u << 14;
+
+    while (bit > n) bit >>= 2;
+    while (bit != 0) {
+        if (n >= res + bit) {
+            n -= (uint16_t)(res + bit);
+            res = (uint16_t)((res >> 1) + bit);
+        } else {
+            res >>= 1;
+        }
+        bit >>= 2;
+    }
+
+    if (res > 127) res = 127;
+    return (uint8_t)res;
 }

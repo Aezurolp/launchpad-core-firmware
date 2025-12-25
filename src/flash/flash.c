@@ -8,8 +8,8 @@ static uint8_t flash[1024] = {0};
 
 void flash_read() {
     settings_brightness = 7;
-    settings_velocity_curve = 0;
     settings_velocity_enabled = 0;
+    settings_velocity_curve = 1;
     settings_aftertouch_curve = 0;
     settings_aftertouch_mode = 0;
     settings_palette = 0;
@@ -26,8 +26,8 @@ void flash_read() {
     }
     
     if (settings_brightness > 7) settings_brightness = 7;
-    if (settings_velocity_curve > 1) settings_velocity_curve = 0;
     if (settings_velocity_enabled > 2) settings_velocity_enabled = 0;
+    if (settings_velocity_curve > 1) settings_velocity_curve = 1;
     if (settings_aftertouch_curve > 2) settings_aftertouch_curve = 0;
     if (settings_aftertouch_mode > 2) settings_aftertouch_mode = 0;
     if (settings_palette > 6) settings_palette = 0;
