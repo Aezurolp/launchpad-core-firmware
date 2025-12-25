@@ -21,7 +21,7 @@ The injected code can still call back into the original firmware functions, effe
 
 | Launchpad Device / OFW-Version | LEDs | Buttons | MIDI | Flash |
 | ------------------------------ |:----:|:-------:|:----:|:-----:|
-| Launchpad Pro Mk3 (385)        | ✅   | ✅      | ✅   | 🚧    |
+| Launchpad Pro Mk3 (385)        | ✅   | ✅      | ✅   | ✅    |
 | Launchpad Pro Mk1 (OSS)        | ✅   | ✅      | ✅   | ✅    |
 | Launchpad X (351)              | ✅   | ✅      | ✅   | 🚧    |
 | Launchpad Mini Mk3 (407)       | ✅   | ✅      | ✅   | 🚧    |

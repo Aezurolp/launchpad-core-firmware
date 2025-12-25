@@ -1,7 +1,7 @@
 MEMORY
 {
   FLASH (rx) : ORIGIN = 0x08010000, LENGTH = 458752
-  RAM (rwx)  : ORIGIN = 0x20048000, LENGTH = 32K
+  RAM (rwx)  : ORIGIN = 0x2003C000, LENGTH = 32K
   STATE (rwx) : ORIGIN = 0x20030000, LENGTH = 4K
 }
 
@@ -24,17 +24,27 @@ SECTIONS
     KEEP(*(.cfw_rodata*))
   } > FLASH
 
-  .data : { *(.data*) } > RAM AT > FLASH
+  . = ORIGIN(RAM);
 
-  .padding : {
-    . = ORIGIN(FLASH) + LENGTH(FLASH);
-  } > FLASH
+  .data : ALIGN(4) {
+    _sdata = .;
+    *(.data*)
+    _edata = .;
+  } > RAM AT > FLASH
 
-  .bss  : { *(.bss*)  *(COMMON) } > RAM
+  _sidata = LOADADDR(.data);
+
+  .bss (NOLOAD) : ALIGN(4) {
+    _sbss = .;
+    *(.bss*) *(COMMON)
+    _ebss = .;
+  } > RAM
 
   . = ALIGN(16);
   .cfw_bss (NOLOAD) : ALIGN(16) {
+    _scfw_bss = .;
     *(.cfw_bss*)
+    _ecfw_bss = .;
   } > RAM
 
   . = ALIGN(16);
@@ -42,9 +52,9 @@ SECTIONS
     *(.cfw_state*)
   } > STATE
 
-  _sidata = LOADADDR(.data);
-  _sdata  = ADDR(.data); _edata = _sdata + SIZEOF(.data);
-  _sbss   = ADDR(.bss);  _ebss  = _sbss  + SIZEOF(.bss);
-  _scfw_bss = ADDR(.cfw_bss); _ecfw_bss = _scfw_bss + SIZEOF(.cfw_bss);
+  .padding : {
+    . = ORIGIN(FLASH) + LENGTH(FLASH);
+  } > FLASH
+
   _estack = ORIGIN(RAM) + LENGTH(RAM);
 }
