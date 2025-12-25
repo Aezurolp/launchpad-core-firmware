@@ -15,6 +15,9 @@
 #define MINI_SHORT_CTX_PP   ((void**)0x2000886Cu)
 #define MINI_TX_WRITER_PP   ((void**)0x200088F8u)
 
+#define PORT0_CTX_PP      ((void**)0x200005D0u)
+#define PORT1_CTX_PP      ((void**)0x200005d4u)
+
 #define OFF_IN_SYSEX  0x0Cu
 #define OFF_BUF_PTR   0x10u
 #define OFF_BUF_CAP   0x50u
@@ -58,6 +61,7 @@ static void CFW_Midi_CB(uint8_t port, uint8_t st, uint8_t d1, uint8_t d2){
 __attribute__((section(".cfw_keep")))
 static void CFW_SysEx_CB(void* cookie, const uint8_t* buf, uint32_t len){
     uint8_t port = (uint8_t)(uintptr_t)cookie;
+
     app_sysex_event(port, (uint8_t*)buf, (uint16_t)len);
 }
 
@@ -159,31 +163,30 @@ void init_buttons() {
 static inline void* mini_get_short_ctx(void){ return *MINI_SHORT_CTX_PP; }
 static inline void* mini_get_writer(void){    return *MINI_TX_WRITER_PP; }
 
+static inline void* get_port_ctx(uint8_t port){
+    if (port == 0) return *PORT0_CTX_PP;
+    if (port == 1) return *PORT1_CTX_PP;
+    return *PORT0_CTX_PP;
+}
+
 void driver_send_midi(uint8_t port, const uint8_t* data, uint16_t len){
-    (void)port;
     if (!data || !len) return;
 
-    send_short_fn SEND_SHORT = (send_short_fn)(SEND_SHORT_ADDR | 1u);
+    void* ctx = get_port_ctx(port);
+    if (!ctx) return;
 
-    void* short_ctx = mini_get_short_ctx();
-    if (!short_ctx) return;
+    send_short_fn SEND_SHORT = (send_short_fn)(SEND_SHORT_ADDR | 1u);
+    tx_put_fn     TX_PUT     = (tx_put_fn    )(TX_PUT_ADDR    | 1u);
 
     if (data[0] >= 0xF8) {
-        (void)SEND_SHORT(short_ctx, data[0], 0, 0, 0);
+        (void)SEND_SHORT(ctx, data[0], 0, 0, 0);
         return;
     }
 
     if (data[0] == 0xF0) {
-        void* writer = mini_get_writer();
-        if (!writer) return;
-
-        tx_begin_fn TX_BEGIN = (tx_begin_fn)(MINI_TX_BEGIN_ADDR | 1u);
-        tx_put_fn   TX_PUT   = (tx_put_fn  )(TX_PUT_ADDR       | 1u);
-
-        uint32_t prev = 0;
-        uint32_t acc  = TX_BEGIN(writer);
+        uint32_t prev = 0, acc = 0;
         for (uint16_t i = 0; i < len; ++i){
-            acc  = TX_PUT(writer, data[i], prev, acc);
+            acc = TX_PUT(ctx, data[i], prev, acc);
             prev = data[i];
             if (data[i] == 0xF7) break;
         }
@@ -193,5 +196,6 @@ void driver_send_midi(uint8_t port, const uint8_t* data, uint16_t len){
     uint8_t st = data[0];
     uint8_t d1 = (len > 1) ? data[1] : 0;
     uint8_t d2 = (len > 2) ? data[2] : 0;
-    (void)SEND_SHORT(short_ctx, st, d1, d2, 0);
+
+    SEND_SHORT(ctx, st, d1, d2, 0);
 }
