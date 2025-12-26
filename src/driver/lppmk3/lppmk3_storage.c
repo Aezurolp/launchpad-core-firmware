@@ -51,6 +51,22 @@ static uint32_t u32_min(uint32_t a, uint32_t b) { return a < b ? a : b; }
 static uint32_t u32_max(uint32_t a, uint32_t b) { return a > b ? a : b; }
 static uint32_t align_up(uint32_t x, uint32_t a) { return (x + (a - 1u)) & ~(a - 1u); }
 
+#define NAFFS_THREAD_ID_ADDR   0x2004FB1Cu
+#define NAFFS_MAILBOX_ID_ADDR  0x2004FB20u
+
+static inline int naffs_ready(void) {
+    return (*(void* volatile*)NAFFS_THREAD_ID_ADDR != 0) &&
+           (*(void* volatile*)NAFFS_MAILBOX_ID_ADDR != 0);
+}
+
+static int naffs_wait_ready(uint32_t spins) {
+    while (spins--) {
+        if (naffs_ready()) return 1;
+        __asm volatile("nop");
+    }
+    return 0;
+}
+
 static uint32_t clamp_len(uint32_t off, uint32_t len) {
     if (off >= CFW_FLASH_CAPACITY) return 0;
     uint32_t max = CFW_FLASH_CAPACITY - off;
@@ -68,6 +84,10 @@ void driver_read_flash(uint32_t offset, uint8_t* data, uint32_t len) {
     if (len == 0) return;
 
     memset(data, 0xFF, len);
+
+    if (!naffs_wait_ready(800000u)) {
+        return;
+    }
 
     int32_t size_i = 0;
     if (NAFFS_GET_SIZE(CFW_NAFFS_DEV, CFW_NAFFS_FILE, &size_i) != 0 || size_i <= 0) return;

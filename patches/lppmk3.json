@@ -62,15 +62,6 @@
 			"addresses": ["0x08069CCA"]
 		},
 		{
-			"name": "Kill onboarding drive (old)",
-			"type": "replace_bytes_patch",
-			"enabled": false,
-			"replacement": "00460046",
-			"description": "Previous location 0x0806B4CC disabled",
-			"addresses": ["0x0806B4CC"]
-		}
-		,
-		{
 			"name": "Kill onboarding drive (short NOP)",
 			"type": "replace_bytes_patch",
 			"enabled": true,
@@ -81,7 +72,7 @@
 		{
 			"name": "Kill onboarding drive (BL→NOP)",
 			"type": "replace_bytes_patch",
-			"enabled": false,
+			"enabled": true,
 			"replacement": "460046",
 			"description": "Match protest.bin: 3-byte NOP sequences at multiple sites",
 			"addresses": ["0x08062247", "0x0806224D", "0x08062257"]

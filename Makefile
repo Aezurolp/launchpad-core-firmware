@@ -228,7 +228,7 @@ $(BUILD_DIR)/fw.elf: $(OBJS) | $(BUILD_DIR)
 ifeq ($(DEVICE),lppmk3)
 $(BUILD_DIR)/fw.bin: $(BUILD_DIR)/fw.elf
 	@echo "Generating full LPPMK3 FLASH image via objcopy..."
-	arm-none-eabi-objcopy -O binary --gap-fill 0xFF $< $@
+	arm-none-eabi-objcopy -O binary $< $@
 else
 $(BUILD_DIR)/fw.bin: $(BUILD_DIR)/fw.elf
 	arm-none-eabi-objcopy -O binary $< $@

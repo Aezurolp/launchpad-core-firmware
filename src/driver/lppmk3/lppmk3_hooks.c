@@ -145,9 +145,43 @@ void pump_controls_events(void) {
     }
 }
 
+extern uint32_t _sidata;
+extern uint32_t _sdata;
+extern uint32_t _edata;
+extern uint32_t _sbss;
+extern uint32_t _ebss;
+
+#define CFW_STATE __attribute__((section(".cfw_state")))
+
+CFW_STATE static uint32_t g_rt_magic0;
+CFW_STATE static uint32_t g_rt_magic1;
+
+static inline void cfw_runtime_init_once(void) {
+    const uint32_t M0 = 0xC0DEF00Du;
+    const uint32_t M1 = 0x385FFu;
+
+    if (g_rt_magic0 == M0 && g_rt_magic1 == M1) return;
+
+    uint32_t* src = &_sidata;
+    uint32_t* dst = &_sdata;
+    while (dst < &_edata) {
+        *dst++ = *src++;
+    }
+
+    uint32_t* b = &_sbss;
+    while (b < &_ebss) {
+        *b++ = 0u;
+    }
+
+    g_rt_magic0 = M0;
+    g_rt_magic1 = M1;
+}
+
 __attribute__((section(".cfw_keep"), used))
 void CFW_AppTick(void)
 {
+    cfw_runtime_init_once();
+
     static uint8_t init = 0;
     static uint8_t flush_div = 0;
 
@@ -180,7 +214,7 @@ int32_t CFW_1MS_TIMER(int32_t arg1)
 __attribute__((section(".cfw_keep"), used, noinline, aligned(4)))
 int32_t CFW_MIDI_RECEIVE(int32_t arg1, char* arg2, int32_t arg3)
 {
-    if (arg1 != 4) return 0; // "MIDI" Port
+    if (arg1 != 4) return 0;
 
     if (arg3 == 3) {
         app_midi_event(1u, (uint8_t)arg2[0], (uint8_t)arg2[1], (uint8_t)arg2[2]);
@@ -206,8 +240,3 @@ void driver_send_midi(uint8_t port, const uint8_t* data, uint16_t len)
 
     SEND_MIDI(4, data, len);
 }
-
-__attribute__((section(".padding"), used))
-static const uint8_t firmware_padding[34412] = {
-    [0 ... 34411] = 0xFF
-};
