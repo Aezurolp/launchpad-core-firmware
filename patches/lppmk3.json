@@ -60,22 +60,6 @@
 			"replacement": "c3d0",
 			"description": "Invert branch from BNE to BEQ at 0x08069CCA (if condition inverted)",
 			"addresses": ["0x08069CCA"]
-		},
-		{
-			"name": "Kill onboarding drive (short NOP)",
-			"type": "replace_bytes_patch",
-			"enabled": true,
-			"replacement": "0046",
-			"description": "Match protest.bin: 2-byte NOP at 0x08062238",
-			"addresses": ["0x08062238"]
-		},
-		{
-			"name": "Kill onboarding drive (BL→NOP)",
-			"type": "replace_bytes_patch",
-			"enabled": true,
-			"replacement": "460046",
-			"description": "Match protest.bin: 3-byte NOP sequences at multiple sites",
-			"addresses": ["0x08062247", "0x0806224D", "0x08062257"]
 		}
 	]
 }
