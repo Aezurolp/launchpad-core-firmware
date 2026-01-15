@@ -77,6 +77,12 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
             g &= 0x3F;
             b &= 0x3F;
 
+            #if defined(LPMINI) || defined(LPX) || defined(LPPMK3) 
+            r *= 2;
+            g *= 2;
+            b *= 2;
+            #endif
+
             for (uint8_t j = 0; j < n; j++) {
                 uint8_t x = *i++;
 
