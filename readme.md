@@ -49,4 +49,4 @@ I am genuinely open to collaboration. If Novation is interested, I’m happy to 
 The creation of this project was inspired by:
 
 - [Gabriel Valky (gabonator)](https://github.com/gabonator)
-- [Mat1jaczyyy](https://github.com/mat1jaczyyy)
+- [mat1jaczyyy](https://github.com/mat1jaczyyy)
