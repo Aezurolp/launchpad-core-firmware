@@ -62,6 +62,7 @@ else ifeq ($(DEVICE),lppmk3)
 			src/driver/lppmk3/lppmk3_leds.c \
 			src/driver/lppmk3/lppmk3_storage.c \
 			src/driver/lppmk3/lppmk3_driver.c \
+			src/driver/lppmk3/lppmk3_threading.c \
 			src/driver/lppmk3/sysconf.c
 	BLOB_OBJ=libs/lppmk3_blob.o
 	VERSION=385
