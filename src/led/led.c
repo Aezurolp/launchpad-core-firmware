@@ -76,9 +76,9 @@ void palette_led(uint8_t led, uint8_t velocity) {
             return;
         } else if (settings_palette >= 4) {
             // Custom palette
-            uint8_t r = scale6to8(settings_custom_palette[settings_palette - 3][0][velocity]);
-            uint8_t g = scale6to8(settings_custom_palette[settings_palette - 3][1][velocity]);
-            uint8_t b = scale6to8(settings_custom_palette[settings_palette - 3][2][velocity]);
+            uint8_t r = scale6to8(settings_custom_palette[settings_palette - 4][0][velocity]);
+            uint8_t g = scale6to8(settings_custom_palette[settings_palette - 4][1][velocity]);
+            uint8_t b = scale6to8(settings_custom_palette[settings_palette - 4][2][velocity]);
 
             driver_set_led(led, (uint32_t)((r << 16) | (g << 8) | b));
             return;
@@ -109,9 +109,9 @@ void palette_led(uint8_t led, uint8_t velocity) {
             return;
         } else if (settings_palette >= 4) {
             // Custom palette
-            uint8_t r = settings_custom_palette[settings_palette - 3][0][velocity];
-            uint8_t g = settings_custom_palette[settings_palette - 3][1][velocity];
-            uint8_t b = settings_custom_palette[settings_palette - 3][2][velocity];
+            uint8_t r = settings_custom_palette[settings_palette - 4][0][velocity];
+            uint8_t g = settings_custom_palette[settings_palette - 4][1][velocity];
+            uint8_t b = settings_custom_palette[settings_palette - 4][2][velocity];
 
             driver_set_led_rgb(led, r, g, b);
             return;
