@@ -91,7 +91,16 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
                         rgb_led(k, r, g, b);
 
                 else if (x <= 99)
-                    rgb_led(x, r, g, b);
+                    #if defined(LPPMK3)
+                        if (x >= 1 && x <= 8) {
+                            rgb_led(100 + x, r, g, b);
+                            rgb_led(x, r, g, b);
+                        } else {
+                            rgb_led(x, r, g, b);
+                        }
+                    #else
+                        rgb_led(x, r, g, b);
+                    #endif
 
                 else if (x <= 109) {
                     x = (x - 100) * 10 + 1;
