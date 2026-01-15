@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define CFW_VERSION {0, 1, 0}
+#define CFW_VERSION {0, 1, 1}
 
 struct SystemConf {
     char * name;
