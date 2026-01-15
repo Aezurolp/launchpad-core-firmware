@@ -1,4 +1,5 @@
 #include "lppmk3_leds.h"
+#include "flash/settings.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -34,6 +35,30 @@ __attribute__((section(".cfw_state")))
 static uint32_t g_rr_start;
 
 static inline uint32_t rgb24(uint32_t c) { return (c & 0x00FFFFFFu); }
+
+static inline uint8_t br_lvl_to_scale(uint8_t lvl)
+{
+    static const uint8_t map[8] = { 36u, 49u, 62u, 75u, 88u, 101u, 114u, 127u };
+    return map[(uint8_t)(lvl & 7u)];
+}
+
+static inline uint32_t apply_brightness24(uint32_t c24, uint8_t lvl)
+{
+    uint8_t scale = br_lvl_to_scale(lvl);
+    c24 &= 0x00FFFFFFu;
+    if (scale >= 127u) {
+        return c24;
+    }
+    uint32_t r = (c24 >> 16) & 0xFFu;
+    uint32_t g = (c24 >> 8)  & 0xFFu;
+    uint32_t b = (c24 >> 0)  & 0xFFu;
+
+    r = (r * (uint32_t)scale) >> 7;
+    g = (g * (uint32_t)scale) >> 7;
+    b = (b * (uint32_t)scale) >> 7;
+
+    return (uint32_t)((r << 16) | (g << 8) | b);
+}
 
 static void build_valid_table(void)
 {
@@ -97,15 +122,17 @@ void lppmk3_leds_flush(void)
     uint32_t i = g_rr_start;
     uint32_t scanned = 0u;
     bool pending_any = false;
+    uint8_t br_lvl = settings_brightness; // 0..7
 
     while (scanned < LED_INTERNAL_MAX) {
         if (g_valid[i]) {
             uint32_t c = g_fb[i];
-            if (g_hw[i] != c) {
+            uint32_t cs = apply_brightness24(c, br_lvl);
+            if (g_hw[i] != cs) {
                 pending_any = true;
-                int32_t r = OFW_SET_LED(i, c);
+                int32_t r = OFW_SET_LED(i, cs);
                 if (r == 0) {
-                    g_hw[i] = c;
+                    g_hw[i] = cs;
                     ++pushed;
                     if (pushed >= MAX_UPDATES_PER_FLUSH) {
                         ++i; if (i >= LED_INTERNAL_MAX) i = 0u;
@@ -131,4 +158,20 @@ void lppmk3_leds_flush(void)
     } else {
         g_dirty_any = 1u;
     }
+}
+
+uint8_t driver_get_brightness(void)
+{
+    return (uint8_t)(settings_brightness & 7u);
+}
+
+void driver_set_brightness(uint8_t level)
+{
+    if (level > 7u) level = 7u;
+    settings_brightness = level;
+
+    for (uint32_t i = 0; i < LED_INTERNAL_MAX; ++i) {
+        g_hw[i] = 0xFFFFFFFFu;
+    }
+    g_dirty_any = 1u;
 }

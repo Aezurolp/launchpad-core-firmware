@@ -4,14 +4,6 @@
 
 void driver_set_led_rgb(uint8_t led, uint8_t red, uint8_t green, uint8_t blue) { }
 
-uint8_t driver_get_brightness(void) {
-    return settings_brightness;
-}
-
-void driver_set_brightness(uint8_t level) {
-    settings_brightness = level;
-}
-
 void driver_set_velocity_curve(uint8_t curve) {
     settings_velocity_curve = curve;
 }
