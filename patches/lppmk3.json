@@ -23,14 +23,6 @@
 			"manual_offset": "366274"
 		},
 		{
-			"name": "Midi Callback",
-			"type": "redirect_all_calls",
-			"enabled": true,
-			"target_symbol": "CFW_MIDI_RECEIVE",
-            "original_function": "0x08029924",
-            "search_range": "0x80000000"
-		},
-		{
 			"name": "M0 Tuning",
 			"type": "redirect_all_calls",
 			"enabled": true,
