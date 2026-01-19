@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "lppmk3_leds.h"
+#include "lppmk3_threading.h"
 #include "app.h"
 
 #define THUMB(addr) ((addr) | 1u)
@@ -66,7 +67,6 @@ static inline uint8_t app_port_from_mask(uint8_t portMask)
 static inline bool is_control_msg(uint8_t t) {
     return (t == 0x03) || (t == 0x0C) || (t == 0x0D);
 }
-static inline bool is_midi_short(uint8_t t) { return (t == 0x06); }
 static inline bool is_midi_sysex(uint8_t t) { return (t == 0x07); }
 
 void pump_controls_events(void)
@@ -82,19 +82,6 @@ void pump_controls_events(void)
         if (!msg) break;
 
         const uint8_t t = msg[0];
-
-        if (is_midi_short(t)) {
-            const uint8_t portMask = msg[4];
-            const uint8_t len      = msg[5];
-            const uint8_t b0       = msg[6];
-            const uint8_t b1       = (len >= 2) ? msg[7] : 0;
-            const uint8_t b2       = (len >= 3) ? msg[8] : 0;
-
-            app_midi_event(app_port_from_mask(portMask), b0, b1, b2);
-
-            OS_MAIL_FREE(mbox, msg);
-            continue;
-        }
 
         if (is_midi_sysex(t)) {
             const uint8_t portMask = msg[4];
@@ -212,6 +199,28 @@ void CFW_AppTick(void)
         ms++;
         app_timer_event();
     }
+
+    if (ms == 10000) {
+        boost_m0();
+    }
+}
+
+__attribute__((section(".cfw_keep"), used, noinline, aligned(4)))
+int32_t CFW_MIDI_RECEIVE(int32_t arg1, char* arg2, int32_t arg3)
+{
+    if (arg1 != 4) return 0; // port 4 == the "MIDI" port
+    if (!arg2 || arg3 <= 0) return 0;
+
+    if ((uint8_t)arg2[0] == 0xF0) {
+        return ((int32_t (*)(int32_t, char*, int32_t))(0x08029924u | 1u))(arg1, arg2, arg3);
+    }
+
+    if (arg3 == 3) {
+        app_midi_event(1u, (uint8_t)arg2[0], (uint8_t)arg2[1], (uint8_t)arg2[2]);
+        return 0;
+    }
+
+    return 0;
 }
 
 __attribute__((section(".cfw_keep"), used))

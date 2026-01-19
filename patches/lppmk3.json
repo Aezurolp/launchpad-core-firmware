@@ -23,6 +23,14 @@
 			"manual_offset": "366274"
 		},
 		{
+			"name": "Midi Callback",
+			"type": "redirect_all_calls",
+			"enabled": true,
+			"target_symbol": "CFW_MIDI_RECEIVE",
+            "original_function": "0x08029924",
+            "search_range": "0x80000000"
+		},
+		{
 			"name": "M0 Tuning",
 			"type": "redirect_all_calls",
 			"enabled": true,
@@ -60,38 +68,6 @@
 			"replacement": "c3d0",
 			"description": "Invert branch from BNE to BEQ at 0x08069CCA (if condition inverted)",
 			"addresses": ["0x08069CCA"]
-		},
-		{
-			"name": "Remove Vegas Thread creation",
-			"type": "nop_patch",
-			"enabled": false,
-			"address": "0x0806c0e0",
-			"count": 4
-		},
-		{
-			"name": "Remove Init Animation Thread creation",
-			"type": "nop_patch",
-			"enabled": false,
-			"address": "0x0806c0b8",
-			"count": 4
-		},
-		{
-			"name": "Pipeline Patch",
-			"type": "raw_patch",
-			"offset": "0x1598a",
-			"data": "0022"
-		},
-		{
-			"name": "Pipeline Patch",
-			"type": "raw_patch",
-			"offset": "0x159ca",
-			"data": "0022"
-		},
-		{
-			"name": "Pipeline Patch",
-			"type": "raw_patch",
-			"offset": "0x01586e",
-			"data": "1022"
 		}
 	]
 }
