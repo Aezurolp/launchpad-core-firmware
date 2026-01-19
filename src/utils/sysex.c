@@ -27,11 +27,10 @@
 #define DEVICE_INQUIRY_LENGTH 17
 
 #if defined(LPPRO)
-// Grid mapping for row/column/grid messages (Side LED 99 is NOT addressable via grid)
 static inline int map_grid_rc_to_led(uint8_t row, uint8_t col) {
     if (row > 9 || col > 9) return -1;
-    // Corners have no LEDs but still occupy positions in grid messages
     if ((row == 0 || row == 9) && (col == 0 || col == 9)) return -1;
+    
     return (int)(row * 10 + col);
 }
 #endif
@@ -64,7 +63,7 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
         return;
     }
 
-    if (buf[1] == 0x5F) {
+    if (buf[1] == 0x5F) {// FASTLED by mat1jaczyyy
         for (uint8_t* i = buf + 2; i < buf + (len - 1);) {
             uint8_t r = *i++;
             uint8_t g = *i++;
@@ -146,7 +145,7 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
         }
     }
 
-    #ifndef LPPRO
+    #if !defined(LPPRO) // LED SYSTEM FOR LPX, LPMINI, LPPMK3
     if (len >= 8 &&
         buf[1] == 0x00 && buf[2] == 0x20 && buf[3] == 0x29 && buf[4] == 0x02 &&
         (buf[5] == 0x0C || buf[5] == 0x0D || buf[5] == 0x0E) && buf[6] == 0x03) {
@@ -187,9 +186,6 @@ void handle_sysex(uint8_t* buf, uint16_t len) {
         return;
     }
     #else // LED SYSTEM FOR LPPRO
-    
-    // Official Launchpad Pro SysEx LED messages
-    // Docs: color-lppro.md (0x0A/0x0C/0x0D) and rgb-lppro.md (0x0B/0x0F)
     if (len >= 8 &&
         buf[1] == 0x00 && buf[2] == 0x20 && buf[3] == 0x29 && buf[4] == 0x02 && buf[5] == 0x10) {
         
