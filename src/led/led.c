@@ -87,10 +87,12 @@ void palette_led(uint8_t led, uint8_t velocity) {
             rgb_led(led, rg_calc(velocity, 0) * 2, rg_calc(velocity, 1) * 2, 0);
             return;
         } else if (settings_palette <= 2) {
+            #if !defined(LPMINI)
             if (settings_palette == 0) {
                 driver_set_led(led, NOVATION_RGB_PAL_U32[velocity]);
                 return;
             }
+            #endif
 
             uint8_t r = scale6to8(native_palettes[settings_palette][0][velocity]);
             uint8_t g = scale6to8(native_palettes[settings_palette][1][velocity]);
