@@ -208,12 +208,12 @@ void CFW_AppTick(void)
 __attribute__((section(".cfw_keep"), used, noinline, aligned(4)))
 int32_t CFW_MIDI_RECEIVE(int32_t arg1, char* arg2, int32_t arg3)
 {
-    if (arg1 != 4) return 0; // port 4 == the "MIDI" port
-    if (!arg2 || arg3 <= 0) return 0;
-
     if ((uint8_t)arg2[0] == 0xF0) {
         return ((int32_t (*)(int32_t, char*, int32_t))(0x08029924u | 1u))(arg1, arg2, arg3);
     }
+    
+    if (arg1 != 4) return 0; // port 4 == the "MIDI" port
+    if (!arg2 || arg3 <= 0) return 0;
 
     if (arg3 == 3) {
         app_midi_event(1u, (uint8_t)arg2[0], (uint8_t)arg2[1], (uint8_t)arg2[2]);
