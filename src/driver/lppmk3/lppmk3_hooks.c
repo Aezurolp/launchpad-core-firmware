@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "lppmk3_leds.h"
+#include "lppmk3_threading.h"
 #include "app.h"
 
 #define FW_BASE          0x08010000u
@@ -239,6 +240,10 @@ void CFW_AppTick(void)
     if (flush_div++ % 60 == 0) {
         ms++;
         app_timer_event();
+    }
+
+    if (ms == 10000) {
+        boost_m0();
     }
 }
 
