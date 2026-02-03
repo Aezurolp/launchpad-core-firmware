@@ -2,6 +2,7 @@
 *.o
 *.syx
 *.mid
+*.bndb
 /build/mk2/
 /build/lppmk3/
 /build/lpx/

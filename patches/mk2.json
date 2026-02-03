@@ -2,7 +2,7 @@
 	"firmware": {
 		"base_address": "0x08003400",
 		"description": "Launchpad MK2 Firmware v171 patches",
-		"original": "original/LPMK2-171.bin"
+		"original": "original/launchpadmk2-firmware-171.bin"
 	},
 	"landfill": {
 		"enabled": false,
@@ -10,6 +10,14 @@
 		"nops": []
 	},
 	"patches": [
+		{
+			"name": "Register Midi Callback",
+			"type": "redirect_all_calls",
+			"enabled": true,
+			"target_symbol": "SET_MIDI_CALLBACKS",
+            "original_function": "0x08005570",
+            "search_range": "0x80000000"
+		},
         {
 			"name": "App Tick",
 			"type": "call_patch",

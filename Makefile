@@ -81,11 +81,13 @@ else ifeq ($(DEVICE),mk2)
 	CFLAGS:=$(filter-out -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=softfp,$(CFLAGS))
 	CFLAGS+=-DLPMK2 -mcpu=cortex-m3
 	LDFLAGS=-nostdlib -Wl,--gc-sections -T linker/stm32f103_lpmk2.ld
-	DRIVER_SRC=src/driver/lpmk2/mk2_hooks.c \
-			src/driver/lpmk2/mk2_boot.c
+	DRIVER_SRC=src/driver/mk2/mk2_hooks.c \
+			src/driver/mk2/mk2_boot.c
 	BLOB_OBJ=libs/lpmk2_blob.o
 	VERSION=171
 	SYSEX_TYPE=/mk2
+	ORIG_FW_SYX=original/launchpadmk2-firmware-$(VERSION).syx
+	ORIG_FW_BIN=original/launchpadmk2-firmware-$(VERSION).bin
 	PATCHES_FILE=patches/mk2.json
 	BUILD_METHOD=standard
 else ifeq ($(DEVICE),lpp)
@@ -210,8 +212,12 @@ libs/lppmk3_blob.o: $(ORIG_FW_BIN)
 		--rename-section .data=.blob \
 		original/LPPMK3-$(VERSION)-DEFLATED.bin $(BLOB_OBJ)
 else ifeq ($(DEVICE),mk2)
-$(BLOB_OBJ):
-	@echo "Using prebuilt MK2 blob object $(BLOB_OBJ)"
+$(BLOB_OBJ): $(ORIG_FW_BIN)
+	@echo "Creating MK2 blob object from firmware..."
+	@mkdir -p $(dir $(BLOB_OBJ))
+	arm-none-eabi-objcopy -I binary -O elf32-littlearm -B arm \
+		--rename-section .data=.blob \
+		$(ORIG_FW_BIN) $(BLOB_OBJ)
 endif
 	@echo "Cleaning up temporary landfill binary..."
 	# @rm -f $(LANDFILL_BIN)
