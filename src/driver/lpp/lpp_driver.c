@@ -35,9 +35,11 @@ uint8_t driver_get_aftertouch_mode(void) {
 }
 
 void driver_send_midi(uint8_t port, const uint8_t* data, uint16_t len) {
+    uint8_t p = (port == 0) ? 1 : 0;
+
     if (len > 3) {
-        hal_send_sysex(port, data, len);
+        hal_send_sysex(p, data, len);
     } else {
-        hal_send_midi(port, data[0], data[1], data[2]);
+        hal_send_midi(p, data[0], data[1], data[2]);
     }
 }
