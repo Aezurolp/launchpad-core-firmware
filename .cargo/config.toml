@@ -1,0 +1,12 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[alias]
+lpx = "run -p xtask --target aarch64-apple-darwin -- package lpx --release"
+mini = "run -p xtask --target aarch64-apple-darwin -- package mini --release"
+minimk1 = "run -p xtask --target aarch64-apple-darwin -- package minimk1 --release"
+lps = "run -p xtask --target aarch64-apple-darwin -- package lps --release"
+mk2 = "run -p xtask --target aarch64-apple-darwin -- package mk2 --release"
+lpp = "run -p xtask --target aarch64-apple-darwin -- package lpp --release"
+lppmk3 = "run -p xtask --target aarch64-apple-darwin -- package lppmk3 --release"
+all = "run -p xtask --target aarch64-apple-darwin -- all"

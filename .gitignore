@@ -1,0 +1,19 @@
+# Rust build output
+/target/
+
+# Firmware/package artifacts
+/build/
+
+# Local vendored dependency cache
+/vendor/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local environment files
+.env
+.env.*
