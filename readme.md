@@ -1,23 +1,86 @@
-# coreFW - Performance optimize Firmware for the Novation Launchpad
+# coreFW - Performance-optimized Firmware for the Novation Launchpad
 
+coreFW is a full reimplementation of the firmware for the Novation Launchpad device series. It supports all RGB and non-RGB Launchpads, with the exception of the original Launchpad Mk1.
 
+> [!NOTE]
+> This project does not redistribute official Novation firmware. coreFW is custom firmware built through reverse engineering and independent reimplementation of the original firmware. This project is not affiliated with Novation.
+
+## Installation
+
+Visit [fw.anthonyhfm.dev](https://fw.anthonyhfm.dev) for a step-by-step installation guide that walks you through flashing coreFW onto your Launchpad.
+
+Alternatively, download the `.syx` file from the [releases page](../../releases) and flash it manually via the bootloader's MIDI port.
+
+## Features
+
+- Performance optimizations for lightshow use
+- [Roadrunner](https://github.com/anthonyhfm/lppmk3-roadrunner) support on the Launchpad Pro Mk3 (high-speed LED system)
+- Multiple built-in color palettes
+    - Novation palette
+    - Mat1jaczyyy palette
+    - MXOS palette
+    - Launchpad S (legacy) palette
+- 3 flashable custom palette banks
+- Color palette editor
+- FastLED Apollo Support
+- Performance Mode
+    - Bottom row mirroring on the Launchpad Pro Mk3
+- Programmer Mode
+- Custom boot animation
+
+## Device Support
+
+| Device               | Working | RGB | Custom Palettes | Highspeed LED |
+|----------------------|:-------:|:---:|:---------------:|:-------------:|
+| Launchpad Pro Mk3    | ✅      | ✅  | ✅              | ✅            |
+| Launchpad X          | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mini Mk3   | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Pro        | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mk2        | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mini Mk1   | ✅      | ❌  | ❌              | ❌            |
+| Launchpad S          | ✅      | ❌  | ❌              | ❌            |
+
+Custom palettes on the Pro Mk3, X, and Mini Mk3 are stored on onboard external flash. The Pro and Mk2 use the device's internal flash instead. The Launchpad Mini Mk1 and Launchpad S receive basic firmware support (Live Mode only) and do not use the full coreFW feature set.
+
+## Roadmap
+
+- Native Live Modes for all Launchpads
+- Note Mode
+- Chord Mode
+- Custom Modes via Novation Components on all Launchpads
+- Sequencer Mode
+- Core Configurator app
+
+... and more to come!
 
 ## Build
 
-Build a firmware package with:
+Build a firmware package using one of the cargo aliases:
 
 ```sh
 cargo <device>
 ```
 
-the `<device>` options here are:
+Available `<device>` targets:
 
-- lppmk3
-- lpx
-- mini
-- lpp
-- mk2
-- minimk1
-- lps
+| Alias      | Device                  |
+|------------|-------------------------|
+| `lppmk3`   | Launchpad Pro Mk3       |
+| `lpx`      | Launchpad X             |
+| `mini`     | Launchpad Mini Mk3      |
+| `lpp`      | Launchpad Pro           |
+| `mk2`      | Launchpad Mk2           |
+| `minimk1`  | Launchpad Mini Mk1      |
+| `lps`      | Launchpad S             |
 
-# Credits
+To build all targets at once:
+
+```sh
+cargo all
+```
+
+## Credits
+
+[Kaskobi](https://www.youtube.com/@Kaskobi) - Boot Animations
+
+[mat1jaczyyy](https://github.com/mat1jaczyyy) - The original lpp-performance-cfw for the Launchpad Pro Mk2
