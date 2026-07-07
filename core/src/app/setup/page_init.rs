@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 #[cfg(feature = "rgb-color")]
 use crate::app::palette_editor::ensure_custom_palette_has_template;
 use crate::app::setup::page::Page;

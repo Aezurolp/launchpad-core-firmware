@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use core::marker::PhantomData;
 
 use crate::app::palette_editor::PaletteEditorApp;

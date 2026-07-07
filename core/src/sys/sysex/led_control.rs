@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 pub trait LedTarget {
     fn set_palette(&mut self, index: u8, velocity: u8);
     fn set_rgb(&mut self, index: u8, r: u8, g: u8, b: u8);

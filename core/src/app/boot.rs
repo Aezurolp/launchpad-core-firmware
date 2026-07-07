@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use crate::app::{AftertouchEvent, App, AppId, MidiEvent, SurfaceEvent};
 use crate::sys::led;
 

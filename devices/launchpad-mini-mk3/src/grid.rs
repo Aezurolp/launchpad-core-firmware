@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use crate::buttons::Buttons;
 use crate::leds::Leds;
 use embassy_stm32::Peri;

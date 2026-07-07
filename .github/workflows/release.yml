@@ -1,0 +1,49 @@
+name: Release Firmware
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+          targets: thumbv7em-none-eabihf,thumbv7m-none-eabi
+          components: rust-src,llvm-tools
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Read version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep -A5 '^\[workspace\.package\]' Cargo.toml | grep '^version' | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build firmware packages
+        run: cargo xtask all
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.VERSION }}"
+          git push origin "v${{ steps.version.outputs.VERSION }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: coreFW v${{ steps.version.outputs.VERSION }}
+          draft: false
+          files: build/*

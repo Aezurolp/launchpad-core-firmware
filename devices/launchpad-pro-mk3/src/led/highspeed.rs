@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use crate::led::LED_COUNT;
 use crate::map::LED_REMAP;
 use crate::runtime::M0Link;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use crate::app::palette_editor::{BACK_BUTTON, hsv_to_rgb, scale_color};
 use crate::sys::led;
 

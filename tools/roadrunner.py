@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2025-2026 Anthony Hofmeister
+
 from __future__ import annotations
 
 import argparse

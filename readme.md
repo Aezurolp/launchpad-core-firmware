@@ -79,8 +79,31 @@ To build all targets at once:
 cargo all
 ```
 
+### Flashing the firmware manually
+
+You can flash the firmware using our `flash.py` tooling. Here is an example for the Launchpad Pro Mk2
+
+```shell
+python3 tools/flash.py build/core-launchpad-pro.syx
+```
+
 ## Credits
 
 [Kaskobi](https://www.youtube.com/@Kaskobi) - Boot Animations
 
 [mat1jaczyyy](https://github.com/mat1jaczyyy) - The original lpp-performance-cfw for the Launchpad Pro Mk2
+
+## License
+
+coreFW is licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
+
+Copyright (C) 2025-2026 Anthony Hofmeister.
+
+This means that if you modify coreFW and distribute or publish your modified
+version (e.g. as a fork, a public build, or a firmware release), you must:
+
+- release the full corresponding source code of your modified version under
+  the GPL-3.0-only license as well,
+- retain the original copyright notices and give credit to Anthony
+  Hofmeister as the original author,
+- clearly mark what you changed.

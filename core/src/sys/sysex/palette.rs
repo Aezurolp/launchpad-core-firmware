@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 use super::SysExHandler;
 use crate::app::AppId;
 use crate::sys::midi::MidiPort;

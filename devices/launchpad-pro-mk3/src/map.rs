@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 pub const BUTTON_REMAP_SIZE: usize = 128;
 pub const BUTTON_REMAP: [u8; BUTTON_REMAP_SIZE] = [
     11, 21, 31, 41, 51, 61, 71, 81, 12, 22, 32, 42, 52, 62, 72, 82, 13, 23, 33, 43, 53, 63, 73, 83,

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 const LP_LED_COUNT: usize = 100; // not actually true physically but it's true for the xy indexing
 const LP_LED_BITS: usize = 256;
 const LP_LED_PLANES: usize = 6;

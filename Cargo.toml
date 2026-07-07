@@ -26,6 +26,8 @@ resolver = "2"
 edition = "2024"
 version = "1.0.0"
 publish = false
+license = "GPL-3.0-only"
+authors = ["Anthony Hofmeister"]
 
 [workspace.dependencies]
 defmt = "1.0.1"

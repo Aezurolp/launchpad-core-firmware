@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 const LP_BUTTON_COUNT: usize = 100;
 const LP_SCAN_GROUPS: usize = 4;
 const PAD_SCAN_MAP: [u8; LP_BUTTON_COUNT] = [

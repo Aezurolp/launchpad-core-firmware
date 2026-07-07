@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
 #[cfg(feature = "no-setup-btn")]
 use crate::app::palette_editor::SAVE_BUTTON;
 use crate::app::palette_editor::{BACK_BUTTON, NEXT_BUTTON, rgb, scale_color};
