@@ -76,6 +76,7 @@ impl InitPage {
                 0x100040
             },
         );
+
         led::set(
             PROGRAMMER_BUTTON,
             if mode == AppId::Programmer {
@@ -149,6 +150,7 @@ impl Page for InitPage {
         led::set(89, 0x550000);
 
         self.text.draw();
+        led::set(57, 0x100000);
         self.draw_mode_selector();
         self.draw_palette_selector();
     }
