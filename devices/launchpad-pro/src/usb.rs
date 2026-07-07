@@ -122,9 +122,9 @@ const CONFIG_DESCRIPTOR: [u8; CONFIG_TOTAL_LEN as usize] = [
 const STRING_ZERO: [u8; 4] = [4, DESC_STRING, 0x09, 0x04];
 const STRING_MANUFACTURER: [u8; 38] = utf16_string_18(*b"Focusrite A.E. Ltd");
 const STRING_PRODUCT: [u8; 28] = utf16_string_13(*b"Launchpad Pro");
-const STRING_SERIAL: [u8; 22] = utf16_string_10(*b"COREFW-LPP");
-const STRING_PORT1: [u8; 20] = utf16_string_9(*b"LPP (DAW)");
-const STRING_PORT2: [u8; 22] = utf16_string_10(*b"LPP (MIDI)");
+const STRING_SERIAL: [u8; 22] = utf16_string_10(*b"COREFW-PRO");
+const STRING_PORT1: [u8; 20] = utf16_string_9(*b"PRO (DAW)");
+const STRING_PORT2: [u8; 22] = utf16_string_10(*b"PRO (MIDI)");
 
 const fn utf16_string_9(value: [u8; 9]) -> [u8; 20] {
     let mut out = [0u8; 20];
