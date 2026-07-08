@@ -1,13 +1,19 @@
-# coreFW - Performance-optimized Firmware for the Novation Launchpad
+# CoreFW - Performance-optimized Firmware for the Novation Launchpad
 
-coreFW is a full reimplementation of the firmware for the Novation Launchpad device series. It supports all RGB and non-RGB Launchpads, with the exception of the original Launchpad Mk1.
+<div>
+  <a href="https://fw.anthonyhfm.dev">
+    <img src="header.svg">
+  </a>
+</div>
+
+CoreFW is a full reimplementation of the firmware for the Novation Launchpad device series. It supports all RGB and non-RGB Launchpads, with the exception of the original Launchpad Mk1.
 
 > [!NOTE]
-> This project does not redistribute official Novation firmware. coreFW is custom firmware built through reverse engineering and independent reimplementation of the original firmware. This project is not affiliated with Novation.
+> This project does not redistribute official Novation firmware. CoreFW is custom firmware built through reverse engineering and independent reimplementation of the original firmware. This project is not affiliated with Novation.
 
 ## Installation
 
-Visit [fw.anthonyhfm.dev](https://fw.anthonyhfm.dev) for a step-by-step installation guide that walks you through flashing coreFW onto your Launchpad.
+Visit [fw.anthonyhfm.dev](https://fw.anthonyhfm.dev) for a step-by-step installation guide that walks you through flashing CoreFW onto your Launchpad.
 
 Alternatively, download the `.syx` file from the [releases page](../../releases) and flash it manually via the bootloader's MIDI port.
 
@@ -40,7 +46,7 @@ Alternatively, download the `.syx` file from the [releases page](../../releases)
 | Launchpad Mini Mk1   | ✅      | ❌  | ❌              | ❌            |
 | Launchpad S          | ✅      | ❌  | ❌              | ❌            |
 
-Custom palettes on the Pro Mk3, X, and Mini Mk3 are stored on onboard external flash. The Pro and Mk2 use the device's internal flash instead. The Launchpad Mini Mk1 and Launchpad S receive basic firmware support (Live Mode only) and do not use the full coreFW feature set.
+Custom palettes on the Pro Mk3, X, and Mini Mk3 are stored on onboard external flash. The Pro and Mk2 use the device's internal flash instead. The Launchpad Mini Mk1 and Launchpad S receive basic firmware support (Live Mode only) and do not use the full CoreFW feature set.
 
 ## Roadmap
 
@@ -95,11 +101,11 @@ python3 tools/flash.py build/core-launchpad-pro.syx
 
 ## License
 
-coreFW is licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
+CoreFW is licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
 
 Copyright (C) 2025-2026 Anthony Hofmeister.
 
-This means that if you modify coreFW and distribute or publish your modified
+This means that if you modify CoreFW and distribute or publish your modified
 version (e.g. as a fork, a public build, or a firmware release), you must:
 
 - release the full corresponding source code of your modified version under
