@@ -1,12 +1,10 @@
-# CoreFW - Performance-optimized Firmware for the Novation Launchpad
-
 <div align="center">
   <a href="https://fw.anthonyhfm.dev">
     <img src="header.svg" alt="CoreFW Header" width="100%">
   </a>
 </div>
 
-CoreFW is a full reimplementation of the firmware for the Novation Launchpad device series. It supports all RGB and non-RGB Launchpads, with the exception of the original Launchpad Mk1.
+CoreFW is a full reimplementation of the firmware for the Novation Launchpad device series. Originally, it was a reverse engineering and binary injection project (`launchpad-injection-cfw`). It now supports all RGB and non-RGB Launchpads with accessible bootloaders.
 
 > [!NOTE]
 > This project does not redistribute official Novation firmware. CoreFW is custom firmware built through reverse engineering and independent reimplementation of the original firmware. This project is not affiliated with Novation.
