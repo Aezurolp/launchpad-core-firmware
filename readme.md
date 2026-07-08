@@ -1,8 +1,8 @@
 # CoreFW - Performance-optimized Firmware for the Novation Launchpad
 
-<div>
+<div align="center">
   <a href="https://fw.anthonyhfm.dev">
-    <img src="header.svg">
+    <img src="header.svg" alt="CoreFW Header" width="100%">
   </a>
 </div>
 
