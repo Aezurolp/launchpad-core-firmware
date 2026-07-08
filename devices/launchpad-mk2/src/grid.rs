@@ -80,15 +80,11 @@ impl Grid {
     }
 
     pub fn set_led(&mut self, index: u8, color: u32) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_led(index, color);
-        });
+        self.leds.set_led(index, color);
     }
 
     pub fn set_led_rgb(&mut self, index: u8, r: u8, g: u8, b: u8) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_led_rgb(index, r, g, b);
-        });
+        self.leds.set_led_rgb(index, r, g, b);
     }
 
     pub fn fill(&mut self, color: u32) {
@@ -100,9 +96,7 @@ impl Grid {
     }
 
     pub fn set_brightness(&mut self, brightness: u8) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_brightness(brightness);
-        });
+        self.leds.set_brightness(brightness);
     }
 
     pub fn blank_phase(&mut self) {

@@ -2,8 +2,9 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicU8, Ordering, compiler_fence};
 
+use cortex_m::register::{basepri, basepri_max};
 use embassy_stm32::interrupt::{self, InterruptExt, Priority};
 
 use crate::grid::Grid;
@@ -278,5 +279,29 @@ unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
     unsafe {
         let value = ptr::read_volatile(reg);
         ptr::write_volatile(reg, f(value));
+    }
+}
+
+const RESERVE_P0_BASEPRI: u8 = Priority::P1 as u8;
+
+struct ScanPriorityCriticalSection;
+critical_section::set_impl!(ScanPriorityCriticalSection);
+
+unsafe impl critical_section::Impl for ScanPriorityCriticalSection {
+    unsafe fn acquire() -> critical_section::RawRestoreState {
+        let previous = basepri::read();
+
+        basepri_max::write(RESERVE_P0_BASEPRI);
+        compiler_fence(Ordering::SeqCst);
+        previous
+    }
+
+    unsafe fn release(previous: critical_section::RawRestoreState) {
+        compiler_fence(Ordering::SeqCst);
+        // SAFETY: `previous` is the exact `BASEPRI` value captured by the
+        // matching `acquire`, so this only ever restores the prior level.
+        unsafe {
+            basepri::write(previous);
+        }
     }
 }

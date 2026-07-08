@@ -308,8 +308,10 @@ pub fn init() {
             CNTR_CTRM | CNTR_ERRM | CNTR_WKUPM | CNTR_SUSPM | CNTR_RESETM,
         );
 
-        use embassy_stm32::interrupt::USB_LP_CAN1_RX0;
+        use embassy_stm32::interrupt::{Priority, USB_LP_CAN1_RX0};
         USB_LP_CAN1_RX0.unpend();
+        
+        USB_LP_CAN1_RX0.set_priority(Priority::P2);
         USB_LP_CAN1_RX0.enable();
     }
 }

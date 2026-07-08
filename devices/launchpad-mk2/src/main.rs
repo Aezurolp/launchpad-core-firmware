@@ -16,6 +16,7 @@ pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
+use embassy_stm32::interrupt::InterruptExt;
 use embassy_stm32::rcc::*;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -59,6 +60,8 @@ async fn main(spawner: Spawner) {
     config.rcc.apb2_pre = APBPrescaler::DIV2;
 
     let _p = embassy_stm32::init(config);
+
+    embassy_stm32::interrupt::TIM4.set_priority(embassy_stm32::interrupt::Priority::P1);
 
     init_usb_board();
 

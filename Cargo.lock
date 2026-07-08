@@ -711,6 +711,7 @@ version = "1.0.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "critical-section",
  "embassy-executor",
  "embassy-stm32",
  "embassy-sync",
