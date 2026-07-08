@@ -309,7 +309,9 @@ pub fn init() {
         );
 
         use embassy_stm32::interrupt::USB_LP_CAN1_RX0;
+        use embassy_stm32::interrupt::Priority;
         USB_LP_CAN1_RX0.unpend();
+        USB_LP_CAN1_RX0.set_priority(Priority::P2);
         USB_LP_CAN1_RX0.enable();
     }
 }

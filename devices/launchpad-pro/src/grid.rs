@@ -1,10 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
+//! Surface hardware glue: GPIO/SPI2/ADC/DMA setup, the four LED-scan phase
+//! callbacks driven by `leds::TIM3`, ADC bank scanning for the pressure
+//! pads, and VBUS-based `PowerMode` detection.
+//!
+//! This is a clean-room reimplementation of the reference Launchpad Pro
+//! firmware's surface driver, reverse engineered from the original firmware
+//! disassembly. The key change versus a naive reimplementation is that the
+//! LED shift-register transfer (SPI2, full duplex with the switch matrix
+//! read-back) is driven by DMA (SPI2 TX = DMA1 Channel 5, SPI2 RX = DMA1
+//! Channel 4) instead of a blocking busy-wait inside the TIM3 interrupt.
+//! Blocking there stalls the CPU for a variable amount of time depending on
+//! bus/interrupt contention, which stretches the very short "bright" pulses
+//! used for low bit-planes (e.g. bit 0, ~2-5 ticks) by an amount that swamps
+//! their nominal duration - this is what caused the visible low-brightness
+//! flicker. Using DMA lets the transfer complete deterministically off the
+//! CPU, and `leds.rs` gates unblanking on the transfer's completion
+//! (`DMAFinished`) rather than assuming a fixed duration.
+
 use core::ptr;
 
 use crate::inputs::{GridEvent, Inputs};
-use crate::leds::Leds;
+use crate::leds::{self, Leds};
 
 const GROUP_COUNT: usize = 4;
 const SHIFT_BYTES_PER_SCAN: usize = 10;
@@ -18,6 +36,7 @@ const RCC_APB1ENR: *mut u32 = 0x4002_101c as *mut u32;
 const GPIOA_CRL: *mut u32 = 0x4001_0800 as *mut u32;
 const GPIOB_CRL: *mut u32 = 0x4001_0c00 as *mut u32;
 const GPIOB_CRH: *mut u32 = 0x4001_0c04 as *mut u32;
+const GPIOB_IDR: *mut u32 = 0x4001_0c08 as *mut u32;
 const GPIOC_CRL: *mut u32 = 0x4001_1000 as *mut u32;
 const GPIOC_CRH: *mut u32 = 0x4001_1004 as *mut u32;
 const GPIOD_CRL: *mut u32 = 0x4001_1400 as *mut u32;
@@ -27,7 +46,7 @@ const GPIOC_BSRR: *mut u32 = 0x4001_1010 as *mut u32;
 const GPIOC_BRR: *mut u32 = 0x4001_1014 as *mut u32;
 const GPIOD_BSRR: *mut u32 = 0x4001_1410 as *mut u32;
 const SPI2_CR1: *mut u32 = 0x4000_3800 as *mut u32;
-const SPI2_SR: *mut u32 = 0x4000_3808 as *mut u32;
+const SPI2_CR2: *mut u32 = 0x4000_3804 as *mut u32;
 const SPI2_DR: *mut u32 = 0x4000_380c as *mut u32;
 const ADC1_SR: *mut u32 = 0x4001_2400 as *mut u32;
 const ADC1_CR1: *mut u32 = 0x4001_2404 as *mut u32;
@@ -41,9 +60,21 @@ const ADC1_DR: *mut u32 = 0x4001_244c as *mut u32;
 
 const DMA1_IFCR: *mut u32 = 0x4002_0004 as *mut u32;
 const DMA1_CCR1: *mut u32 = 0x4002_0008 as *mut u32;
-const DMA1_CNDTR1: *mut u32 = 0x4002_000C as *mut u32;
+const DMA1_CNDTR1: *mut u32 = 0x4002_000c as *mut u32;
 const DMA1_CPAR1: *mut u32 = 0x4002_0010 as *mut u32;
 const DMA1_CMAR1: *mut u32 = 0x4002_0014 as *mut u32;
+
+// DMA1 Channel 4 = SPI2_RX, Channel 5 = SPI2_TX (fixed STM32F103 mapping).
+const DMA1_CCR4: *mut u32 = 0x4002_0044 as *mut u32;
+const DMA1_CNDTR4: *mut u32 = 0x4002_0048 as *mut u32;
+const DMA1_CPAR4: *mut u32 = 0x4002_004c as *mut u32;
+const DMA1_CMAR4: *mut u32 = 0x4002_0050 as *mut u32;
+const DMA1_CCR5: *mut u32 = 0x4002_0058 as *mut u32;
+const DMA1_CNDTR5: *mut u32 = 0x4002_005c as *mut u32;
+const DMA1_CPAR5: *mut u32 = 0x4002_0060 as *mut u32;
+const DMA1_CMAR5: *mut u32 = 0x4002_0064 as *mut u32;
+const DMA1_CH4_ALL_FLAGS: u32 = 0xf << 12;
+const DMA1_CH5_ALL_FLAGS: u32 = 0xf << 16;
 
 const AFIOEN: u32 = 1 << 0;
 const IOPAEN: u32 = 1 << 2;
@@ -63,10 +94,9 @@ const SPI_CR1_SPE: u32 = 1 << 6;
 const SPI_CR1_LSBFIRST: u32 = 1 << 7;
 const SPI_CR1_SSI: u32 = 1 << 8;
 const SPI_CR1_SSM: u32 = 1 << 9;
+const SPI_CR2_RXDMAEN: u32 = 1 << 0;
+const SPI_CR2_TXDMAEN: u32 = 1 << 1;
 
-const SPI_SR_RXNE: u32 = 1 << 0;
-const SPI_SR_TXE: u32 = 1 << 1;
-const SPI_SR_BSY: u32 = 1 << 7;
 const ADC_SR_EOC: u32 = 1 << 1;
 const ADC_CR1_SCAN: u32 = 1 << 8;
 const ADC_CR2_ADON: u32 = 1 << 0;
@@ -77,12 +107,20 @@ const ADC_CR2_SWSTART: u32 = 1 << 22;
 const ADC_CR2_EXTSEL_SWSTART: u32 = 0b111 << 17;
 const ADC_CR2_DMA: u32 = 1 << 8;
 const DMA_CCR_EN: u32 = 1 << 0;
+const DMA_CCR_TCIE: u32 = 1 << 1;
+const DMA_CCR_DIR: u32 = 1 << 4;
 const DMA_CCR_MINC: u32 = 1 << 7;
 const DMA_CCR_PSIZE_16: u32 = 1 << 8;
 const DMA_CCR_MSIZE_16: u32 = 1 << 10;
 
 const DMA_IFCR_CTCIF1: u32 = 1 << 1;
 const ADC_SEQUENCE: [u8; 16] = [11, 10, 13, 12, 1, 0, 3, 2, 5, 4, 7, 6, 15, 14, 8, 9];
+
+// VBUS/PowerMode detection: GPIOB pin 9 (mask 0x200). High = self-powered
+// (PowerMode 2), low = bus-powered (PowerMode 1). Confirmed only after 3
+// consecutive agreeing samples, matching the reference firmware's filter.
+const VBUS_PIN_MASK: u32 = 1 << 9;
+const VBUS_CONFIRM_SAMPLES: u8 = 3;
 
 pub struct Grid {
     inputs: Inputs,
@@ -94,12 +132,17 @@ pub struct Grid {
     adc_bank: u8,
     adc_buffer: [u16; 16],
     setup_accum: bool,
+    vbus_last_raw: bool,
+    vbus_stable_count: u8,
+    vbus_confirmed_high: bool,
 }
 
 impl Grid {
     pub fn new() -> Self {
         init_surface_hardware();
         init_adc_hardware();
+
+        let initial_vbus_high = read_vbus_raw();
 
         let this = Self {
             inputs: Inputs::new(),
@@ -111,10 +154,18 @@ impl Grid {
             adc_bank: 0,
             adc_buffer: [0; 16],
             setup_accum: false,
+            vbus_last_raw: initial_vbus_high,
+            vbus_stable_count: VBUS_CONFIRM_SAMPLES,
+            vbus_confirmed_high: initial_vbus_high,
         };
         this.blank_assert();
         this.deselect_all_groups();
         this.set_adc_bank_lines(0);
+
+        // One-time unfiltered initial PowerMode assignment, matching the
+        // reference's `init_exti` behaviour.
+        leds::set_power_mode(if initial_vbus_high { 2 } else { 1 });
+
         this
     }
 
@@ -122,22 +173,26 @@ impl Grid {
         self.inputs.poll_event()
     }
 
+    // NOTE: LED buffer writes are deliberately NOT wrapped in a critical
+    // section. The TIM3 scan ISR only ever *reads* the payload buffer, so
+    // the worst case of a concurrent write is a torn read that shows one or
+    // two LEDs a slightly wrong colour for a single ~sub-millisecond
+    // subframe - visually imperceptible. Disabling interrupts here (as the
+    // previous implementation did) instead stalls the TIM3 ISR for the whole
+    // duration of the write, which stretches whichever "bright" pulse is
+    // currently active and produces exactly the kind of update-correlated
+    // flicker we are trying to eliminate. The reference firmware likewise
+    // writes its LED buffer from the main context with no critical section.
     pub fn set_led(&mut self, index: u8, color: u32) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_led(index, color);
-        });
+        self.leds.set_led(index, color);
     }
 
     pub fn set_led_rgb(&mut self, index: u8, r: u8, g: u8, b: u8) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_led_rgb(index, r, g, b);
-        });
+        self.leds.set_led_rgb(index, r, g, b);
     }
 
     pub fn fill(&mut self, color: u32) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.fill(color);
-        });
+        self.leds.fill(color);
     }
 
     pub fn brightness(&self) -> u8 {
@@ -145,11 +200,14 @@ impl Grid {
     }
 
     pub fn set_brightness(&mut self, brightness: u8) {
-        cortex_m::interrupt::free(|_| {
-            self.leds.set_brightness(brightness);
-        });
+        self.leds.set_brightness(brightness);
     }
 
+    // --- TIM3 phase callbacks, invoked from `leds::TIM3` -------------------
+
+    /// SurfaceMode 0 (BLANK): assert blank, deselect every group line and
+    /// build the shift-out payload for the (group, bright-bit) pair that is
+    /// about to be scanned.
     pub fn blank_phase(&mut self) {
         self.blank_assert();
         self.deselect_all_groups();
@@ -160,12 +218,42 @@ impl Grid {
         );
     }
 
-    pub fn null_surface_phase(&mut self) {}
+    /// SurfaceMode 1 (NULLSURFACE): (re-)arm the DMA transfer-count
+    /// registers for both the TX (LED data out, Channel 5) and RX (switch
+    /// data in, Channel 4) sides, without starting the transfer yet.
+    pub fn null_surface_phase(&mut self) {
+        unsafe {
+            modify_reg(DMA1_CCR4, |v| v & !DMA_CCR_EN);
+            modify_reg(DMA1_CCR5, |v| v & !DMA_CCR_EN);
+            write_reg(DMA1_IFCR, DMA1_CH4_ALL_FLAGS | DMA1_CH5_ALL_FLAGS);
 
-    pub fn ledshift_phase(&mut self) {
-        spi2_transfer(&self.shift_tx, &mut self.shift_rx);
+            write_reg(DMA1_CPAR4, SPI2_DR as u32);
+            write_reg(DMA1_CMAR4, self.shift_rx.as_ptr() as u32);
+            write_reg(DMA1_CNDTR4, SHIFT_BYTES_PER_SCAN as u32);
+            write_reg(DMA1_CCR4, DMA_CCR_MINC | DMA_CCR_TCIE);
+
+            write_reg(DMA1_CPAR5, SPI2_DR as u32);
+            write_reg(DMA1_CMAR5, self.shift_tx.as_ptr() as u32);
+            write_reg(DMA1_CNDTR5, SHIFT_BYTES_PER_SCAN as u32);
+            write_reg(DMA1_CCR5, DMA_CCR_MINC | DMA_CCR_DIR);
+        }
     }
 
+    /// SurfaceMode 2 (LEDSHIFT): start the SPI2 full-duplex DMA transfer.
+    /// Non-blocking - completion is signalled asynchronously via the
+    /// DMA1 Channel 4 (RX) interrupt, which sets `DMAFinished` in `leds.rs`.
+    pub fn ledshift_phase(&mut self) {
+        unsafe {
+            // Enable RX before TX so the first incoming byte is never missed.
+            modify_reg(DMA1_CCR4, |v| v | DMA_CCR_EN);
+            modify_reg(DMA1_CCR5, |v| v | DMA_CCR_EN);
+        }
+    }
+
+    /// SurfaceMode 3 (BRIGHT): only called once the previous shift's DMA
+    /// transfer has completed. Releases blank, selects the current group's
+    /// line, captures switch data from the just-completed shift-in on the
+    /// first bright-bit of the frame, and advances the scan position.
     pub fn bright_phase(&mut self) -> u8 {
         let bright_step = self.selected_bit;
         self.blank_release();
@@ -180,6 +268,7 @@ impl Grid {
     pub fn tick_1khz_collect(&mut self) {
         self.collect_adc_scan();
         self.inputs.tick_1khz();
+        self.poll_power_mode();
     }
 
     pub fn tick_1khz_start(&mut self) {
@@ -275,6 +364,27 @@ impl Grid {
         }
     }
 
+    /// Debounced VBUS read: only updates `PowerMode` once 3 consecutive
+    /// samples agree on a new level, matching the reference firmware's
+    /// filter and avoiding spurious PowerMode flips from a noisy/bouncing
+    /// VBUS line while a cable is being inserted or removed.
+    fn poll_power_mode(&mut self) {
+        let raw = read_vbus_raw();
+        if raw == self.vbus_last_raw {
+            if self.vbus_stable_count < VBUS_CONFIRM_SAMPLES {
+                self.vbus_stable_count += 1;
+            }
+        } else {
+            self.vbus_last_raw = raw;
+            self.vbus_stable_count = 1;
+        }
+
+        if self.vbus_stable_count >= VBUS_CONFIRM_SAMPLES && self.vbus_confirmed_high != raw {
+            self.vbus_confirmed_high = raw;
+            leds::set_power_mode(if raw { 2 } else { 1 });
+        }
+    }
+
     fn set_adc_bank_lines(&self, bank: u8) {
         unsafe {
             match bank & 3 {
@@ -323,6 +433,10 @@ impl Grid {
             }
         }
     }
+}
+
+fn read_vbus_raw() -> bool {
+    unsafe { read_reg(GPIOB_IDR) & VBUS_PIN_MASK != 0 }
 }
 
 fn init_surface_hardware() {
@@ -397,6 +511,10 @@ fn init_surface_hardware() {
                 | SPI_CR1_SSI
                 | SPI_CR1_SPE,
         );
+        // Enable SPI2's DMA request lines once; individual transfers are
+        // gated purely by each DMA channel's own EN bit (see
+        // null_surface_phase/ledshift_phase).
+        write_reg(SPI2_CR2, SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN);
     }
 }
 
@@ -428,19 +546,6 @@ fn init_adc_hardware() {
         modify_reg(ADC1_CR2, |value| value | ADC_CR2_CAL);
         while read_reg(ADC1_CR2) & ADC_CR2_CAL != 0 {}
     }
-}
-
-fn spi2_transfer(tx: &[u8; SHIFT_BYTES_PER_SCAN], rx: &mut [u8; SHIFT_BYTES_PER_SCAN]) {
-    for (index, &byte) in tx.iter().enumerate() {
-        unsafe {
-            while read_reg(SPI2_SR) & SPI_SR_TXE == 0 {}
-            ptr::write_volatile(SPI2_DR as *mut u8, byte);
-            while read_reg(SPI2_SR) & SPI_SR_RXNE == 0 {}
-            rx[index] = ptr::read_volatile(SPI2_DR as *const u8);
-        }
-    }
-
-    unsafe { while read_reg(SPI2_SR) & SPI_SR_BSY != 0 {} }
 }
 
 fn start_adc_conversion() {

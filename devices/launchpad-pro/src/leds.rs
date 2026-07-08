@@ -1,9 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU8, Ordering};
+//! LED bit-plane buffer model + the TIM3-driven scan sequencer.
+//!
+//! This is a clean-room reimplementation of the reference Launchpad Pro
+//! firmware's LED scan engine (`TIM3_IRQHandler` / `BLANK_func` /
+//! `NULLSURFACE_func` / `LEDSHIFT_func` / `BRIGHT_func`), reverse engineered
+//! from the original firmware disassembly. The critical fix versus a naive
+//! reimplementation is that the "bright" (unblank + hold) phase is gated on
+//! the SPI2/DMA shift-register transfer having actually completed
+//! (`DMAFinished`), rather than assuming a fixed transfer time or blocking
+//! inside the timer interrupt. Without this gate, low-brightness LEDs
+//! (whose entire on-time is only 2-5 timer ticks) are extremely sensitive to
+//! any scheduling jitter, which is what caused the visible flicker.
 
+use core::ptr;
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering, compiler_fence};
+
+use cortex_m::register::{basepri, basepri_max};
 use embassy_stm32::interrupt::{self, InterruptExt};
 
 use crate::grid::Grid;
@@ -169,6 +183,38 @@ impl Leds {
     }
 }
 
+// --- TIM3 scan sequencer ---------------------------------------------------
+//
+// Reference `SurfaceMode` state machine (TIM3_IRQHandler):
+//   0 = BLANK        - assert blank, advance (group, bright-bit), build the
+//                       next shift-out payload
+//   1 = NULLSURFACE  - (re-)arm the DMA transfer-count registers
+//   2 = LEDSHIFT     - start the SPI2 TX/RX DMA transfer (non-blocking)
+//   3 = BRIGHT       - once DMA has completed, release blank and select the
+//                       current group for exactly `BRIGHT_TIMES` ticks
+//
+// Phase 3 is gated on `DMA_FINISHED`: if the previous DMA transfer hasn't
+// completed yet, TIM3 is reloaded with a short `DMA_POLL_TICKS` interval and
+// re-checks next time, rather than ever unblanking with stale/partial
+// shift-register data.
+
+const TIMER_VALUE: [u16; 3] = [10, 10, 50];
+/// `BRIGHT_TIMES[bright_bit][power_mode - 1]`, on-time in TIM3 ticks for each
+/// BCM bit-plane, for PowerMode 1 (bus-powered) and PowerMode 2
+/// (self-powered). Values follow the exact reference law
+/// `T(n) = U(power_mode) * (6*2^n - 5)` after re-indexing by bit-order.
+const BRIGHT_TIMES: [[u16; 2]; BRIGHT_BIT_COUNT] = [
+    [2, 5],
+    [374, 935],
+    [14, 35],
+    [182, 455],
+    [38, 95],
+    [86, 215],
+];
+const DMA_POLL_TICKS: u16 = 5;
+const TIM3_PERIOD_TICKS: u16 = 10;
+const TIM3_PRESCALER: u16 = 59;
+
 const RCC_APB1ENR: *mut u32 = 0x4002_101c as *mut u32;
 const TIM3_CR1: *mut u32 = 0x4000_0400 as *mut u32;
 const TIM3_DIER: *mut u32 = 0x4000_040c as *mut u32;
@@ -186,17 +232,31 @@ const TIM_DIER_UIE: u32 = 1 << 0;
 const TIM_SR_UIF: u32 = 1 << 0;
 const TIM_EGR_UG: u32 = 1 << 0;
 
-const TIMER_VALUE: [u16; 3] = [10, 10, 50];
-const BRIGHT_TIMES_VBUS_POWER: [u16; 6] = [5, 935, 35, 455, 95, 215];
-const TIM3_PERIOD_TICKS: u16 = 59;
-const TIM3_PRESCALER: u16 = 10;
+// DMA1 channel 4 (SPI2_RX) - its transfer-complete IRQ is the reliable
+// "whole full-duplex transfer is done" signal, matching the reference
+// (which also gates on the RX channel rather than the TX channel).
+const DMA1_ISR: *mut u32 = 0x4002_0000 as *mut u32;
+const DMA1_IFCR: *mut u32 = 0x4002_0004 as *mut u32;
+const DMA1_CCR4: *mut u32 = 0x4002_0044 as *mut u32;
+const DMA_CCR_EN: u32 = 1 << 0;
+const DMA1_CH4_ALL_FLAGS: u32 = 0xf << 12;
 
 static GRID: AtomicPtr<Grid> = AtomicPtr::new(ptr::null_mut());
 static SURFACE_MODE: AtomicU8 = AtomicU8::new(0);
+static DMA_FINISHED: AtomicBool = AtomicBool::new(false);
+static POWER_MODE: AtomicU8 = AtomicU8::new(1);
+
+/// Called once by the VBUS-detect logic (`Grid`) to set the initial power
+/// mode before scanning starts, and afterwards on every confirmed VBUS
+/// transition.
+pub fn set_power_mode(power_mode: u8) {
+    POWER_MODE.store(power_mode.clamp(1, 2), Ordering::Relaxed);
+}
 
 pub fn start_scan(grid: *mut Grid) {
     GRID.store(grid, Ordering::Release);
     SURFACE_MODE.store(0, Ordering::Relaxed);
+    DMA_FINISHED.store(false, Ordering::Relaxed);
 
     unsafe {
         modify_reg(RCC_APB1ENR, |value| value | RCC_APB1ENR_TIM3EN);
@@ -212,9 +272,28 @@ pub fn start_scan(grid: *mut Grid) {
         modify_reg(TIM3_DIER, |value| value | TIM_DIER_UIE);
     }
 
+    // TIM3 drives the LED scan and must service its update interrupt with as
+    // little jitter as possible: any latency at a "bright" phase boundary
+    // directly stretches or clips that subframe's on-time, which is visible
+    // as flicker (especially on the short low-order bit-planes). Give it the
+    // highest priority so it preempts USB (P2), the embassy time driver and
+    // the executor. The DMA-RX completion handler shares the same priority
+    // (see below).
+    interrupt::TIM3.set_priority(interrupt::Priority::P0);
     interrupt::TIM3.unpend();
     unsafe {
         interrupt::TIM3.enable();
+    }
+
+    // Match the reference firmware, which runs TIM3 and the DMA channel
+    // interrupts all at preemption priority 0 (highest). Equal priority means
+    // the DMA-RX completion handler that sets `DMAFinished` and the TIM3 scan
+    // handler never preempt each other, keeping the bright-phase gate
+    // deterministic.
+    interrupt::DMA1_CHANNEL4.set_priority(interrupt::Priority::P0);
+    interrupt::DMA1_CHANNEL4.unpend();
+    unsafe {
+        interrupt::DMA1_CHANNEL4.enable();
     }
 
     unsafe {
@@ -238,29 +317,58 @@ fn TIM3() {
     let grid = unsafe { &mut *grid };
 
     let mode = SURFACE_MODE.load(Ordering::Relaxed);
-    let next_delay = match mode {
-        0 => {
-            grid.blank_phase();
-            TIMER_VALUE[0]
-        }
-        1 => {
-            grid.null_surface_phase();
-            TIMER_VALUE[1]
-        }
-        2 => {
-            grid.ledshift_phase();
-            TIMER_VALUE[2]
-        }
-        _ => {
-            let step = grid.bright_phase() as usize;
-            BRIGHT_TIMES_VBUS_POWER[step]
-        }
-    };
 
-    SURFACE_MODE.store((mode + 1) & 3, Ordering::Relaxed);
-    unsafe {
-        write_reg(TIM3_CNT, next_delay as u32);
+    if mode != 3 || DMA_FINISHED.load(Ordering::Acquire) {
+        if mode == 3 && DMA_FINISHED.load(Ordering::Acquire) {
+            DMA_FINISHED.store(false, Ordering::Release);
+        }
+
+        let next_delay = match mode {
+            0 => {
+                grid.blank_phase();
+                TIMER_VALUE[0]
+            }
+            1 => {
+                grid.null_surface_phase();
+                TIMER_VALUE[1]
+            }
+            2 => {
+                grid.ledshift_phase();
+                TIMER_VALUE[2]
+            }
+            _ => {
+                let bright_bit = grid.bright_phase() as usize;
+                let power_mode = POWER_MODE.load(Ordering::Relaxed).clamp(1, 2);
+                BRIGHT_TIMES[bright_bit][(power_mode - 1) as usize]
+            }
+        };
+
+        unsafe {
+            write_reg(TIM3_CNT, next_delay as u32);
+        }
+        SURFACE_MODE.store((mode + 1) & 3, Ordering::Relaxed);
+    } else {
+        // The bright phase is pending but the previous SPI2/DMA shift-out
+        // hasn't completed yet: re-arm a very short poll interval instead of
+        // unblanking with stale shift-register contents.
+        unsafe {
+            write_reg(TIM3_CNT, DMA_POLL_TICKS as u32);
+        }
     }
+}
+
+/// DMA1 Channel 4 (SPI2 RX) transfer-complete interrupt. In a full-duplex
+/// SPI transfer the RX side always completes last, making this the
+/// authoritative "shift is fully done" signal for both the outgoing LED
+/// data and the incoming switch data.
+#[cortex_m_rt::interrupt]
+fn DMA1_CHANNEL4() {
+    unsafe {
+        modify_reg(DMA1_CCR4, |value| value & !DMA_CCR_EN);
+        write_reg(DMA1_IFCR, DMA1_CH4_ALL_FLAGS);
+        let _ = read_reg(DMA1_ISR);
+    }
+    DMA_FINISHED.store(true, Ordering::Release);
 }
 
 unsafe fn read_reg(reg: *mut u32) -> u32 {
@@ -277,5 +385,57 @@ unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
     unsafe {
         let value = ptr::read_volatile(reg);
         ptr::write_volatile(reg, f(value));
+    }
+}
+
+/// `BASEPRI` threshold that masks preemption priorities `P1`..`P15` while
+/// leaving `P0` unmasked. On this STM32F103 (4 implemented priority bits)
+/// embassy encodes `Priority::P1` as `0x10`.
+const RESERVE_P0_BASEPRI: u8 = interrupt::Priority::P1 as u8;
+
+/// BASEPRI-based `critical-section` implementation that reserves NVIC
+/// preemption priority 0 for the LED scan.
+///
+/// The stock `critical-section-single-core` impl masks *all* interrupts via
+/// `PRIMASK`. embassy takes critical sections several times per millisecond
+/// (time driver, `Mutex`), each of which would then also block our P0 `TIM3`
+/// scan handler. The bright phase of every subframe is ended by the very next
+/// `TIM3` update interrupt, so a delayed handler stretches that subframe's
+/// on-time — a large relative error on the short low-order bit-planes (the
+/// shortest pulse is ~2 ticks ≈ 1.7 µs), which shows up as flicker/scanlines on
+/// dark colors like `(2, 2, 2)`. The reference firmware has no critical
+/// sections, so its scan handler is never delayed; that determinism is what we
+/// reproduce here.
+///
+/// Instead of `PRIMASK` we raise `BASEPRI` to priority level 1, masking
+/// `P1`..`P15` while leaving `P0` (`TIM3` and the LED DMA-RX handler
+/// `DMA1_CHANNEL4`, see [`start_scan`]) always enabled.
+///
+/// Soundness relies on nothing at `P0` touching state a critical section
+/// protects: the only P0 handlers are `TIM3` and `DMA1_CHANNEL4`, which
+/// communicate solely through the atomics and torn-read-tolerant LED buffer in
+/// this module and never touch embassy-internal state. Every other active
+/// interrupt therefore runs at `>= P1` (`USB` at P2; embassy's `TIM4` time
+/// driver is bumped from its P0 reset default to P1 in `main`).
+struct ScanPriorityCriticalSection;
+critical_section::set_impl!(ScanPriorityCriticalSection);
+
+unsafe impl critical_section::Impl for ScanPriorityCriticalSection {
+    unsafe fn acquire() -> critical_section::RawRestoreState {
+        let previous = basepri::read();
+        // `basepri_max` only ever raises the masking threshold, so nested
+        // critical sections can never loosen an outer one.
+        basepri_max::write(RESERVE_P0_BASEPRI);
+        compiler_fence(Ordering::SeqCst);
+        previous
+    }
+
+    unsafe fn release(previous: critical_section::RawRestoreState) {
+        compiler_fence(Ordering::SeqCst);
+        // SAFETY: `previous` is the exact `BASEPRI` value captured by the
+        // matching `acquire`, so this only ever restores the prior level.
+        unsafe {
+            basepri::write(previous);
+        }
     }
 }

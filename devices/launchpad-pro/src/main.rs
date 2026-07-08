@@ -15,6 +15,7 @@ pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
+use embassy_stm32::interrupt::InterruptExt;
 use embassy_stm32::rcc::*;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -58,6 +59,14 @@ async fn main(_spawner: Spawner) {
     config.rcc.apb2_pre = APBPrescaler::DIV1;
 
     let _p = embassy_stm32::init(config);
+
+    // embassy leaves its TIM4 time-driver interrupt at the reset-default
+    // preemption priority (P0). Our BASEPRI critical section (see
+    // `leds::ScanPriorityCriticalSection`) reserves P0 exclusively for the LED
+    // scan and only masks P1..P15, so every embassy-managed interrupt must sit
+    // at >= P1 to stay covered by critical sections. Bump TIM4 to P1 before any
+    // timer alarm can fire concurrently with a critical section.
+    embassy_stm32::interrupt::TIM4.set_priority(embassy_stm32::interrupt::Priority::P1);
 
     init_usb_board();
 
