@@ -60,9 +60,26 @@ impl App for PerformanceApp {
 
         let led_index = layout::dr_to_xy(event.data1);
 
-        match event.status {
+        let status_type = event.status & 0xf0;
+        let _channel = event.status & 0x0f;
+
+        #[cfg(any(
+            feature = "launchpad-x",
+            feature = "launchpad-mini-mk3",
+            feature = "launchpad-pro-mk3"
+        ))]
+        let channel_match = _channel == 0;
+
+        #[cfg(not(any(
+            feature = "launchpad-x",
+            feature = "launchpad-mini-mk3",
+            feature = "launchpad-pro-mk3"
+        )))]
+        let channel_match = true;
+
+        match status_type {
             0x90 => {
-                if led_index != 0 {
+                if channel_match && led_index != 0 {
                     led::set_palette(led_index, event.data2);
                     #[cfg(feature = "launchpad-pro-mk3")]
                     if settings::with(|s| s.mirror_enabled) != 0 && led_index <= 10 {
@@ -71,7 +88,7 @@ impl App for PerformanceApp {
                 }
             }
             0x80 => {
-                if led_index != 0 {
+                if channel_match && led_index != 0 {
                     led::set_palette(led_index, 0);
                     #[cfg(feature = "launchpad-pro-mk3")]
                     if settings::with(|s| s.mirror_enabled) != 0 && led_index <= 10 {
@@ -79,12 +96,25 @@ impl App for PerformanceApp {
                     }
                 }
             }
-            0xb0 => {
-                if (90..=99).contains(&event.data1) {
+            _ => {
+                if event.status == 0xb0 {
+                    #[cfg(any(
+                        feature = "launchpad-x",
+                        feature = "launchpad-mini-mk3",
+                        feature = "launchpad-pro-mk3"
+                    ))]
+                    if (90..=99).contains(&event.data1) {
+                        led::set_palette(event.data1, event.data2);
+                    }
+
+                    #[cfg(not(any(
+                        feature = "launchpad-x",
+                        feature = "launchpad-mini-mk3",
+                        feature = "launchpad-pro-mk3"
+                    )))]
                     led::set_palette(event.data1, event.data2);
                 }
             }
-            _ => {}
         }
     }
 
