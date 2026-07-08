@@ -18,7 +18,8 @@ const CMD_PAGE_PROGRAM: u8 = 0x02;
 const CMD_READ_DATA: u8 = 0x03;
 const CMD_SECTOR_ERASE: u8 = 0x20;
 const STATUS_WIP: u8 = 0x01;
-const EXPECTED_JEDEC_ID: [u8; 3] = [0xc2, 0x20, 0x18];
+const EXPECTED_JEDEC_MANUFACTURER: u8 = 0xc2;
+const EXPECTED_JEDEC_CAPACITY: u8 = 0x18;
 
 const PAGE_SIZE: usize = 256;
 const SECTOR_SIZE: usize = 4096;
@@ -184,7 +185,8 @@ impl<'d> ExtFlash<'d> {
 
     fn probe(&mut self) {
         self.jedec_id = self.read_jedec_id();
-        self.present = self.jedec_id == EXPECTED_JEDEC_ID;
+        self.present = self.jedec_id[0] == EXPECTED_JEDEC_MANUFACTURER
+            && self.jedec_id[2] == EXPECTED_JEDEC_CAPACITY;
     }
 
     fn read_jedec_id(&mut self) -> [u8; 3] {
