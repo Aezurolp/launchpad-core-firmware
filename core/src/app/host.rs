@@ -142,6 +142,9 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
         }
 
         Sysex::execute(self.current, port, data);
+        if let Some(app) = Sysex::take_requested_app_switch() {
+            self.switch(app);
+        }
     }
 
     pub fn route_tick_event(&mut self) {

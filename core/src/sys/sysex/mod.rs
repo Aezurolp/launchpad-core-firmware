@@ -12,6 +12,10 @@ use crate::sys::midi::MidiPort;
 
 pub trait SysExHandler {
     fn execute(app: AppId, port: MidiPort, data: &[u8]) -> bool;
+
+    fn take_requested_app_switch() -> Option<AppId> {
+        None
+    }
 }
 
 pub struct DefaultSysExHandler;

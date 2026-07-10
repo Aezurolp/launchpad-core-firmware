@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use firmware_core::app::AppId;
 use firmware_core::sys::midi::MidiPort;
 use firmware_core::sys::sysex::{DefaultSysExHandler, SysExHandler, fastled, led_control};
@@ -15,6 +16,8 @@ const LED_SYSEX_DEVICE_ID: u8 = 0x0e;
 const M0_REQ_CMD: u8 = 0x70;
 const M0_RESP_CMD: u8 = 0x71;
 const M0_FLASH_CHUNK_LEN: usize = 256;
+static M0_FLASH_ACTIVE: AtomicBool = AtomicBool::new(false);
+static BOOT_CYCLE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub mod device_inquiry;
 
@@ -39,6 +42,12 @@ impl SysExHandler for Handler {
         }
 
         DefaultSysExHandler::execute(app, port, data)
+    }
+
+    fn take_requested_app_switch() -> Option<AppId> {
+        BOOT_CYCLE_REQUESTED
+            .swap(false, Ordering::AcqRel)
+            .then_some(AppId::Boot)
     }
 }
 
@@ -140,6 +149,7 @@ fn handle_roadrunner_stats(port: MidiPort) {
 }
 
 fn handle_flash_begin(port: MidiPort, data: &[u8]) {
+    M0_FLASH_ACTIVE.store(false, Ordering::Release);
     let Some(_base_addr) = parse_hex(data, 8, 8) else {
         send_simple_response(port, b'B', M0_ROM_STATUS_ARG);
         return;
@@ -161,6 +171,7 @@ fn handle_flash_begin(port: MidiPort, data: &[u8]) {
         link.rom_mass_erase()
     })
     .unwrap_or(M0_ROM_STATUS_ARG);
+    M0_FLASH_ACTIVE.store(status == M0_ROM_STATUS_OK, Ordering::Release);
     send_simple_response(port, b'B', status);
 }
 
@@ -219,9 +230,16 @@ fn handle_flash_verify(port: MidiPort, data: &[u8]) {
 }
 
 fn handle_boot(port: MidiPort) {
+    let completes_flash = M0_FLASH_ACTIVE.swap(false, Ordering::AcqRel);
     let _ = runtime::with_m0(|link| link.set_mode(2));
     match runtime::with_runtime(|driver| driver.refresh_m0_firmware_status()) {
-        Some(status) => send_status_response(port, b'O', &status),
+        Some(status) => {
+            let firmware_started = status.status == M0_ROM_STATUS_OK;
+            send_status_response(port, b'O', &status);
+            if completes_flash && firmware_started {
+                BOOT_CYCLE_REQUESTED.store(true, Ordering::Release);
+            }
+        }
         None => send_simple_response(port, b'O', M0_ROM_STATUS_ARG),
     }
 }
