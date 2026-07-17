@@ -26,6 +26,9 @@ const SECTOR_SIZE: usize = 4096;
 const TOTAL_SIZE: u32 = 16 * 1024 * 1024;
 const SETTINGS_SIZE: u32 = 8 * 1024;
 const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
+// The MCU runs at 216 MHz. Keep CS high for about 1 us between commands;
+// this comfortably exceeds the flash chip's minimum CS deselect time.
+const CS_DESELECT_DELAY_CYCLES: u32 = 216;
 
 pub struct ExtFlash<'d> {
     spi: Spi<'d, Blocking, Master>,
@@ -156,6 +159,7 @@ impl<'d> ExtFlash<'d> {
 
     fn deselect(&mut self) {
         self.cs.set_high();
+        cortex_m::asm::delay(CS_DESELECT_DELAY_CYCLES);
     }
 
     fn xfer(&mut self, byte: u8) -> u8 {
