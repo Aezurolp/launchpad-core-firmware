@@ -10,6 +10,7 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
     if data.len() < 8 || data[0] != 0xf0 || data.last() != Some(&0xf7) {
         return false;
     }
+
     if !matches!(
         data,
         [0xf0, 0x00, 0x20, 0x29, 0x02, id, 0x03, ..] if *id == device_id
@@ -35,18 +36,21 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
                 target.set_palette(led_index, data[index]);
                 index += 1;
             }
+
             1 => {
                 if index + 2 > data.len() - 1 {
                     break;
                 }
                 index += 2;
             }
+
             2 => {
                 if index + 1 > data.len() - 1 {
                     break;
                 }
                 index += 1;
             }
+
             3 => {
                 if index + 3 > data.len() - 1 {
                     break;
@@ -57,6 +61,7 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
                 index += 3;
                 target.set_rgb(led_index, r, g, b);
             }
+
             _ => break,
         }
     }
