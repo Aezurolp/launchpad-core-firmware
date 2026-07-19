@@ -10,7 +10,7 @@ use crate::grid::PHYSICAL_TO_LOGICAL;
 
 const PULSES_PER_LED: usize = 24;
 const PULSE_COUNT: usize = LED_COUNT * PULSES_PER_LED + 1;
-const BRIGHTNESS: [u8; 8] = [8, 22, 39, 60, 84, 110, 138, 169];
+const BRIGHTNESS: [u8; 8] = [22, 37, 54, 74, 95, 118, 142, 169];
 
 pub struct Leds {
     channel: Option<Channel<'static, Blocking, Tx>>,

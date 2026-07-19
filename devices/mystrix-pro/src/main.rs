@@ -30,6 +30,8 @@ use crate::app::live::LiveApp;
 use crate::runtime::{Hardware, RuntimeDriver};
 use crate::grid::HardwareEvent;
 
+const LED_REFRESH_HZ: u16 = 300;
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     static HARDWARE: StaticCell<Hardware> = StaticCell::new();
@@ -97,6 +99,7 @@ async fn main(spawner: Spawner) -> ! {
 
     let mut ticker = Ticker::every(Duration::from_millis(1));
     let mut now_ms = 0u32;
+    let mut led_phase = 0u16;
     loop {
         ticker.next().await;
         now_ms = now_ms.wrapping_add(1);
@@ -140,7 +143,9 @@ async fn main(spawner: Spawner) -> ! {
                 host.receive_sysex(message.port, &message.data[..message.len]);
             }
         }
-        if now_ms % 8 == 0 {
+        led_phase += LED_REFRESH_HZ;
+        if led_phase >= 1_000 {
+            led_phase -= 1_000;
             hardware.leds.show();
         }
     }
