@@ -33,18 +33,23 @@ Alternatively, download the `.syx` file from the [releases page](../../releases)
 - Custom boot animation
 
 ## Device Support
+Novation Launchpad support:
 
-| Device               | Working | RGB | Custom Palettes | Highspeed LED |
-|----------------------|:-------:|:---:|:---------------:|:-------------:|
-| Launchpad Pro Mk3    | ✅      | ✅  | ✅              | ✅            |
-| Launchpad X          | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mini Mk3   | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Pro        | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mk2        | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mini Mk1   | ✅      | ❌  | ❌              | ❌            |
-| Launchpad S          | ✅      | ❌  | ❌              | ❌            |
+| Device                | Working | RGB | Custom Palettes | Highspeed LED |
+|-----------------------|:-------:|:---:|:---------------:|:-------------:|
+| Launchpad Pro Mk3     | ✅      | ✅  | ✅              | ✅            |
+| Launchpad X           | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mini Mk3    | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Pro         | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mk2         | ✅      | ✅  | ✅              | ✅            |
+| Launchpad Mini Mk1    | ✅      | ❌  | ❌              | ❌            |
+| Launchpad S           | ✅      | ❌  | ❌              | ❌            |
+----
+Other devices:
 
-Custom palettes on the Pro Mk3, X, and Mini Mk3 are stored on onboard external flash. The Pro and Mk2 use the device's internal flash instead. The Launchpad Mini Mk1 and Launchpad S receive basic firmware support (Live Mode only) and do not use the full CoreFW feature set.
+| Device      | Working | RGB | Custom Palettes | Highspeed LED |
+|-------------|:-------:|:---:|:---------------:|:-------------:|
+| Mystrix Pro | ✅     | ✅  | ✅              | ❌            |
 
 ## Roadmap
 
@@ -76,12 +81,34 @@ Available `<device>` targets:
 | `mk2`      | Launchpad Mk2           |
 | `minimk1`  | Launchpad Mini Mk1      |
 | `lps`      | Launchpad S             |
+| `mxpro`    | Mystrix Pro (ESP32-S3)  |
 
 To build all targets at once:
 
 ```sh
 cargo all
 ```
+
+The Mystrix Pro target uses the ESP Rust toolchain installed by `espup` and produces
+the MatrixOS-compatible UF2 image `build/core-mystrix-pro.uf2`:
+
+```sh
+cargo mxpro
+```
+
+The UF2 contains the ESP32-S3 application image expected by the Mystrix OTA
+bootloader; it does not overwrite the factory bootloader or partition table.
+
+Put the device into its UF2 bootloader mode, then copy that UF2 file to the mounted
+bootloader volume. During development, the ELF can still be flashed directly with
+`espflash`.
+
+Hold the centre FN button during boot to enter the hardware test mode. It verifies
+the 64 pad LEDs, 32 underglow LEDs, pressure pads, touch strips, and FN button.
+
+Matrix Pro pin assignments, LED-chain order, touch-strip mappings, and calibration
+defaults are independently reimplemented from the MIT-licensed MatrixOS Mystrix1
+hardware definitions.
 
 ### Flashing the firmware manually
 

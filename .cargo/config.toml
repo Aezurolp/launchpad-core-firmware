@@ -7,3 +7,12 @@ mk2 = "run -p xtask -- package mk2 --release"
 lpp = "run -p xtask -- package lpp --release"
 lppmk3 = "run -p xtask -- package lppmk3 --release"
 all = "run -p xtask -- all"
+mxpro = "run -p xtask -- package mxpro --release"
+
+[target.'cfg(target_arch = "xtensa")']
+runner = "espflash flash --monitor"
+rustflags = [
+  "-C", "link-arg=-Wl,-Tlinkall.x",
+  "-C", "link-arg=-nostartfiles",
+  "-C", "link-arg=-Wl,-Tdefmt.x",
+]

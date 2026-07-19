@@ -8,6 +8,7 @@ members = [
   "devices/launchpad-pro",
   "devices/launchpad-pro-mk3",
   "devices/launchpad-x",
+  "devices/mystrix-pro",
   "xtask",
 ]
 default-members = [
@@ -19,6 +20,7 @@ default-members = [
   "devices/launchpad-pro",
   "devices/launchpad-pro-mk3",
   "devices/launchpad-x",
+  "devices/mystrix-pro",
 ]
 resolver = "2"
 

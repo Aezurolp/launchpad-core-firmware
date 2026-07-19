@@ -68,7 +68,16 @@ struct DeviceCfg {
     objcopy_pad_to: Option<&'static str>,
 }
 
-const ALL_DEVICES: &[&str] = &["lpx", "mini", "minimk1", "lps", "mk2", "lpp", "lppmk3"];
+const ALL_DEVICES: &[&str] = &[
+    "lpx",
+    "mini",
+    "minimk1",
+    "lps",
+    "mk2",
+    "lpp",
+    "lppmk3",
+    "matrixpro",
+];
 
 fn device_cfg(name: &str) -> Option<DeviceCfg> {
     match name {
@@ -158,7 +167,7 @@ fn run(cmd: &str, args: &[&str], cwd: &Path) -> Result<(), Box<dyn Error>> {
 fn parse_package_args(args: &[String]) -> Result<(String, Option<String>, bool), Box<dyn Error>> {
     if args.len() < 2 {
         return Err(
-            "usage: cargo xtask package <lpx|mini|minimk1|lps|mk2|lpp|lppmk3> [--version <hex3>] [--release]"
+            "usage: cargo xtask package <lpx|mini|minimk1|lps|mk2|lpp|lppmk3|mxpro> [--version <hex3>] [--release]"
                 .into(),
         );
     }
@@ -191,6 +200,9 @@ fn package(
     version: Option<&str>,
     release: bool,
 ) -> Result<(), Box<dyn Error>> {
+    if matches!(device, "mxpro" | "matrixpro" | "mystrix-pro") {
+        return package_matrix_pro(repo, release);
+    }
     let cfg = device_cfg(device)
         .ok_or("device must be one of: lppmk3, lpx, mini, lpp, mk2, lps, minimk1")?;
     let release = release || cfg.device == "mk2" || cfg.device == "minimk1";
@@ -263,6 +275,121 @@ fn package(
     fs::copy(&syx, &final_syx)?;
 
     println!("{}", final_syx.display());
+    Ok(())
+}
+
+fn esp_gcc_bin_dir() -> Result<PathBuf, Box<dyn Error>> {
+    let output = Command::new("rustup")
+        .args(["which", "--toolchain", "esp", "rustc"])
+        .output()?;
+    if !output.status.success() {
+        return Err("ESP Rust toolchain is unavailable; run `espup install` first".into());
+    }
+    let rustc = PathBuf::from(String::from_utf8(output.stdout)?.trim());
+    let toolchain_root = rustc
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("failed to locate ESP Rust toolchain root")?;
+    let candidates = toolchain_root.join("xtensa-esp-elf");
+    let mut versions = fs::read_dir(&candidates)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("xtensa-esp-elf").join("bin"))
+        .filter(|path| path.join("xtensa-esp32s3-elf-gcc").exists())
+        .collect::<Vec<_>>();
+    versions.sort();
+    versions
+        .pop()
+        .ok_or_else(|| "ESP Xtensa GCC is unavailable; rerun `espup install`".into())
+}
+
+fn package_matrix_pro(repo: &Path, release: bool) -> Result<(), Box<dyn Error>> {
+    let profile = if release { "release" } else { "debug" };
+    let gcc_bin = esp_gcc_bin_dir()?;
+    let mut paths = env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect::<Vec<_>>();
+    paths.insert(0, gcc_bin);
+    let path = env::join_paths(paths)?;
+
+    let mut build = Command::new("cargo");
+    build
+        .args([
+            "+esp",
+            "build",
+            "-p",
+            "mystrix-pro",
+            "--bin",
+            "mystrix-pro",
+            "--target",
+            "xtensa-esp32s3-none-elf",
+            "-Zbuild-std=core,alloc",
+        ])
+        .current_dir(repo)
+        .env("PATH", path);
+    if release {
+        build.arg("--release");
+    }
+    eprintln!("+ cargo +esp build -p mystrix-pro --target xtensa-esp32s3-none-elf");
+    if !build.status()?.success() {
+        return Err("Matrix Pro cargo build failed".into());
+    }
+
+    let elf = repo
+        .join("target/xtensa-esp32s3-none-elf")
+        .join(profile)
+        .join("mystrix-pro");
+    if !elf.exists() {
+        return Err(format!("ELF not found: {}", elf.display()).into());
+    }
+    let out_dir = repo.join("build/matrixpro");
+    fs::create_dir_all(&out_dir)?;
+    let image = out_dir.join(".core-mystrix-pro.bin");
+    let elf_arg = elf.display().to_string();
+    let image_arg = image.display().to_string();
+    let partitions = repo.join("devices/mystrix-pro/partitions.csv");
+    let partitions_arg = partitions.display().to_string();
+    run(
+        "espflash",
+        &[
+            "save-image",
+            "--chip",
+            "esp32s3",
+            "--flash-size",
+            "8mb",
+            "--flash-mode",
+            "qio",
+            "--flash-freq",
+            "80mhz",
+            "--partition-table",
+            &partitions_arg,
+            "--target-app-partition",
+            "os",
+            "--ignore-app-descriptor",
+            &elf_arg,
+            &image_arg,
+        ],
+        repo,
+    )?;
+    let final_image = repo.join("build/core-mystrix-pro.uf2");
+    let image_arg = image.display().to_string();
+    let final_image_arg = final_image.display().to_string();
+    run(
+        "python3",
+        &[
+            "tools/uf2tool.py",
+            "--base-address",
+            "0x0",
+            "--family-id",
+            "0xc47e5767",
+            "--output",
+            &final_image_arg,
+            &image_arg,
+        ],
+        repo,
+    )?;
+    fs::remove_file(&image)?;
+    let _ = fs::remove_file(out_dir.join("core-mystrix-pro.bin"));
+    let _ = fs::remove_dir(&out_dir);
+    let _ = fs::remove_file(repo.join("build/core-mystrix-pro.bin"));
+    println!("{}", final_image.display());
     Ok(())
 }
 
