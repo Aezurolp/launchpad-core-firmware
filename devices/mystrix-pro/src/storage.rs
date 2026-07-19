@@ -2,11 +2,11 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 use core::cmp::min;
-use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
+use embedded_storage::{ReadStorage, nor_flash::NorFlash};
 use esp_storage::FlashStorage;
 
 const SETTINGS_OFFSET: u32 = 0x7b_0000;
-const SETTINGS_SIZE: u32 = 64 * 1024;
+const SETTINGS_SIZE: u32 = firmware_core::sys::settings::SETTINGS_FLASH_SIZE as u32;
 const SECTOR_SIZE: usize = 4096;
 
 pub struct SettingsFlash {
@@ -30,10 +30,12 @@ impl SettingsFlash {
             return;
         }
         let readable = min(data.len(), (SETTINGS_SIZE - offset) as usize);
-        if self
-            .flash
-            .read((SETTINGS_OFFSET + offset) as u32, &mut data[..readable])
-            .is_err()
+        if ReadStorage::read(
+            &mut self.flash,
+            SETTINGS_OFFSET + offset,
+            &mut data[..readable],
+        )
+        .is_err()
         {
             data[..readable].fill(0xff);
         }
@@ -53,7 +55,7 @@ impl SettingsFlash {
             let sector_base = absolute & !((SECTOR_SIZE as u32) - 1);
             let in_sector = (absolute - sector_base) as usize;
             let count = min(remaining, SECTOR_SIZE - in_sector);
-            if self.flash.read(sector_base, &mut sector).is_err() {
+            if ReadStorage::read(&mut self.flash, sector_base, &mut sector).is_err() {
                 return;
             }
             if sector[in_sector..in_sector + count] != data[..count] {
