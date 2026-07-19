@@ -42,7 +42,7 @@ impl App for ProgrammerApp {
             return;
         }
 
-        let idx = layout::dr_to_xy(event.data1);
+        let idx = event.data1;
 
         match event.status {
             0x90 => {
