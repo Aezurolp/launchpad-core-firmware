@@ -80,7 +80,8 @@ impl<'d> ExtFlash<'d> {
         let mut rel_off = offset;
         let mut src = data;
         let mut writable = min((SETTINGS_SIZE - offset) as usize, src.len());
-        let mut sector_buf = [0xff; SECTOR_SIZE];
+        static mut SECTOR_BUF: [u8; SECTOR_SIZE] = [0xff; SECTOR_SIZE];
+        let mut sector_buf = unsafe { &mut SECTOR_BUF[..] };
 
         while writable != 0 {
             let abs_off = SETTINGS_OFFSET + rel_off;
@@ -152,6 +153,5 @@ impl NorFlash for ExtFlash<'_> {
             sector_addr += SECTOR_SIZE as u32;
         }
         Ok(())
-
     }
 }

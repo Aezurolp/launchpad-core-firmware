@@ -332,11 +332,11 @@ fn enqueue_sysex_message(message: SysexMessage) -> Result<(), SysexMessage> {
 }
 
 async fn flush_tx_queue(write_ep: &mut impl EndpointIn) -> Result<(), Disconnected> {
+    let mut packet_buf = [0u8; 64];
     while let Some(message) = MIDI_TX_CONSUMER
         .with_mut(|consumer| consumer.dequeue())
         .flatten()
     {
-        let mut packet_buf = [0u8; 64];
         let packet_len =
             encode_usb_midi_packets(message.port, &message.data[..message.len], &mut packet_buf);
 

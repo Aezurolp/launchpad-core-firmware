@@ -56,7 +56,7 @@ fn TIM1_UP_TIM10() {
     }
     pac::TIM1.sr().write(|_| {});
 
-    let grid = GRID.load(Ordering::Acquire);
+    let grid = GRID.load(Ordering::Relaxed);
     if grid.is_null() {
         return;
     }

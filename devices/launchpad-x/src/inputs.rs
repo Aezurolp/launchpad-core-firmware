@@ -212,7 +212,11 @@ impl Inputs {
             w.set_dds(pac::adc::vals::Dds::CONTINUOUS);
             w.set_eocs(pac::adc::vals::Eocs::EACH_CONVERSION);
         });
-        pac::ADC1.smpr2().write(|_| {});
+        pac::ADC1.smpr2().write(|w| {
+            for ch in 0..8 {
+                w.set_smp(ch, pac::adc::vals::SampleTime::CYCLES28);
+            }
+        });
         pac::ADC1.sqr1().write(|w| w.set_l(7));
         pac::ADC1.sqr2().write(|w| {
             w.set_sq(0, 6); // SQ7 = ch6

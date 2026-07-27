@@ -178,13 +178,22 @@ impl Grid {
     }
 
     fn brightness_index(&self) -> usize {
-        let raw = (self.leds.brightness().min(8) as u16 * 255 / 8) as u8;
-        ((9 * raw as u16) >> 8) as usize
+        self.leds.brightness().min(8) as usize
     }
 }
 
 fn flip_index(index: u8) -> u8 {
     (index % 10) + (9 - (index / 10)) * 10
+}
+
+const SIDE_INPUT_LUT: [u16; 16] = [
+    0x0000, 0x0001, 0x0010, 0x0011, 0x0100, 0x0101, 0x0110, 0x0111, 0x1000, 0x1001, 0x1010, 0x1011,
+    0x1100, 0x1101, 0x1110, 0x1111,
+];
+
+fn sample_side_inputs() -> u16 {
+    let idr = (pac::GPIOC.idr().read().0 & 0x0F) as usize;
+    SIDE_INPUT_LUT[idr]
 }
 
 fn init_led_hardware() {
@@ -267,26 +276,6 @@ fn configure_gpio_input_c(pin: usize) {
     pac::GPIOC
         .pupdr()
         .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
-}
-
-fn sample_side_inputs() -> u16 {
-    let idr = pac::GPIOC.idr().read().0;
-    let mut sample = 0u16;
-
-    if idr & (1 << 0) != 0 {
-        sample |= 0x0001;
-    }
-    if idr & (1 << 1) != 0 {
-        sample |= 0x0010;
-    }
-    if idr & (1 << 2) != 0 {
-        sample |= 0x0100;
-    }
-    if idr & (1 << 3) != 0 {
-        sample |= 0x1000;
-    }
-
-    sample
 }
 
 fn spi3_transfer_8(tx: &[u8]) {
