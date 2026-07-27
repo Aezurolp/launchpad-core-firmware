@@ -6,7 +6,6 @@ use crate::app::events::{AftertouchEvent, MidiEvent, SurfaceEvent};
 use crate::driver;
 use crate::sys::midi::MidiPort;
 use crate::sys::{led, settings};
-use crate::utils::layout;
 
 pub struct ProgrammerApp;
 
