@@ -12,25 +12,27 @@ struct AlignedBytes<const N: usize>([u8; N]);
 static BOOT_DATA: AlignedBytes<5332> =
     AlignedBytes(*include_bytes!("../../../animations/boot.bin"));
 
-pub fn new() -> BootApp {
+static BOOT_ANIMATION: BootAnimation = {
     let bytes = &BOOT_DATA.0;
 
     let end_tick = u16::from_le_bytes([bytes[0], bytes[1]]);
     let num_frames = u16::from_le_bytes([bytes[2], bytes[3]]) as usize;
     let num_changes = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
 
-    let frames_ptr = unsafe { bytes.as_ptr().add(8) as *const BootFrame };
-    let changes_ptr = unsafe { bytes.as_ptr().add(8 + num_frames * 4) as *const BootChange };
+    let frames_ptr = bytes.as_ptr().wrapping_add(8) as *const BootFrame;
+    let changes_ptr = bytes.as_ptr().wrapping_add(8 + num_frames * 4) as *const BootChange;
 
     let frames = unsafe { core::slice::from_raw_parts(frames_ptr, num_frames) };
     let changes = unsafe { core::slice::from_raw_parts(changes_ptr, num_changes) };
 
-    static BOOT_ANIMATION: static_cell::StaticCell<BootAnimation> = static_cell::StaticCell::new();
-    let animation = BOOT_ANIMATION.init(BootAnimation {
+    BootAnimation {
         frames,
         changes,
         end_tick,
-    });
+    }
+};
 
-    BootAnimationApp::new(animation)
+pub const fn new() -> BootApp {
+    BootAnimationApp::new(&BOOT_ANIMATION)
 }
+

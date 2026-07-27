@@ -19,7 +19,7 @@ const SETTINGS_SIZE: u32 = 8 * 1024;
 const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
 
 pub struct ExtFlash<'d> {
-    flash: Flash<Spi<'d, Blocking, Master>, Output<'d>>,
+    flash: Option<Flash<Spi<'d, Blocking, Master>, Output<'d>>>,
 }
 
 impl<'d> ExtFlash<'d> {
@@ -37,7 +37,7 @@ impl<'d> ExtFlash<'d> {
         let cs = Output::new(pb12, Level::High, Speed::VeryHigh);
 
         Self {
-            flash: Flash::init(spi, cs).unwrap(),
+            flash: Flash::init(spi, cs).ok(),
         }
     }
 
@@ -56,9 +56,11 @@ impl<'d> ExtFlash<'d> {
         }
 
         let readable = min((SETTINGS_SIZE - offset) as usize, data.len());
-        let _ = self
-            .flash
-            .read(SETTINGS_OFFSET + offset, &mut data[..readable]);
+        if let Some(flash) = &mut self.flash {
+            let _ = flash.read(SETTINGS_OFFSET + offset, &mut data[..readable]);
+        } else {
+            data[..readable].fill(0xff);
+        }
 
         if readable < data.len() {
             data[readable..].fill(0xff);
@@ -66,6 +68,11 @@ impl<'d> ExtFlash<'d> {
     }
 
     pub fn write_settings(&mut self, offset: u32, data: &[u8]) {
+        let flash = match &mut self.flash {
+            Some(f) => f,
+            None => return,
+        };
+
         if data.is_empty() || offset >= SETTINGS_SIZE {
             return;
         }
@@ -81,18 +88,18 @@ impl<'d> ExtFlash<'d> {
             let in_sector = (abs_off - sector_base) as usize;
             let chunk = min(writable, SECTOR_SIZE - in_sector);
 
-            let _ = self.flash.read(sector_base, &mut sector_buf);
+            let _ = flash.read(sector_base, &mut sector_buf);
 
             if sector_buf[in_sector..in_sector + chunk] != src[..chunk] {
                 sector_buf[in_sector..in_sector + chunk].copy_from_slice(&src[..chunk]);
-                let _ = self.flash.erase_sectors(sector_base, 1);
+                let _ = flash.erase_sectors(sector_base, 1);
 
                 for page_off in (0..SECTOR_SIZE).step_by(PAGE_SIZE) {
                     if !sector_buf[page_off..page_off + PAGE_SIZE]
                         .iter()
                         .all(|byte| *byte == 0xff)
                     {
-                        let _ = self.flash.write_bytes(
+                        let _ = flash.write_bytes(
                             sector_base + page_off as u32,
                             &mut sector_buf[page_off..page_off + PAGE_SIZE],
                         );
@@ -139,9 +146,12 @@ impl NorFlash for ExtFlash<'_> {
         }
         let mut sector_addr = from;
         while sector_addr < to {
-            let _ = self.flash.erase_sectors(SETTINGS_OFFSET + sector_addr, 1);
+            if let Some(flash) = &mut self.flash {
+                let _ = flash.erase_sectors(SETTINGS_OFFSET + sector_addr, 1);
+            }
             sector_addr += SECTOR_SIZE as u32;
         }
         Ok(())
+
     }
 }
