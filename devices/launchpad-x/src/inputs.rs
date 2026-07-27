@@ -267,14 +267,7 @@ impl Inputs {
             .st(0)
             .ndtr()
             .write_value(pac::dma::regs::Ndtr(LP_ADC_CHANNELS as u32));
-        configure_dma2_stream0_cr();
         pac::ADC1.sr().write(|_| {});
-        pac::ADC1.cr2().modify(|w| {
-            w.set_cont(false);
-            w.set_dma(true);
-            w.set_dds(pac::adc::vals::Dds::CONTINUOUS);
-            w.set_eocs(pac::adc::vals::Eocs::EACH_CONVERSION);
-        });
 
         self.pressure_capture_bank = bank;
         self.pressure_capture_active = true;
@@ -301,8 +294,6 @@ impl Inputs {
             return false;
         }
 
-        pac::DMA2.st(0).cr().modify(|w| w.set_en(false));
-        while pac::DMA2.st(0).cr().read().en() {}
         clear_dma2_stream0_flags();
 
         for ch in 0..LP_ADC_CHANNELS {
@@ -315,10 +306,12 @@ impl Inputs {
         true
     }
 
-    pub fn pop_event(&mut self) -> Option<GridEvent> {
+    pub fn service(&mut self) {
         self.service_pressure_foreground();
         self.service_side_buttons_foreground();
+    }
 
+    pub fn pop_event(&mut self) -> Option<GridEvent> {
         if self.q_tail == self.q_head {
             return None;
         }

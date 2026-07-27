@@ -89,6 +89,7 @@ async fn main(spawner: Spawner) {
         let mut app_host_guard = app_host.lock().await;
         app_host_guard.route_tick_event();
 
+        grid.process_inputs();
         while let Some(event) = grid.poll_event() {
             match event {
                 inputs::GridEvent::Press { note, value } => {

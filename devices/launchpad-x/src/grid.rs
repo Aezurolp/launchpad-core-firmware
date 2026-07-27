@@ -104,10 +104,25 @@ impl Grid {
         let phase = SCAN_PHASE_LUT[self.scan_slot as usize];
         let phase_mask = 1u8 << phase;
 
-        write_active_low_c(1 << 7, (self.leds.overlay_r & phase_mask) != 0);
-        write_active_low_c(1 << 8, (self.leds.overlay_g & phase_mask) != 0);
-        write_active_low_c(1 << 9, (self.leds.overlay_b & phase_mask) != 0);
-        gpio_set_c(1 << 11);
+        let pc_bsrr = (1 << 11)
+            | (if (self.leds.overlay_r & phase_mask) != 0 {
+                1 << (7 + 16)
+            } else {
+                1 << 7
+            })
+            | (if (self.leds.overlay_g & phase_mask) != 0 {
+                1 << (8 + 16)
+            } else {
+                1 << 8
+            })
+            | (if (self.leds.overlay_b & phase_mask) != 0 {
+                1 << (9 + 16)
+            } else {
+                1 << 9
+            });
+        pac::GPIOC
+            .bsrr()
+            .write_value(pac::gpio::regs::Bsrr(pc_bsrr));
         gpio_reset_b(ROW_MASK[row]);
 
         self.pressure_pending_bank = self.active_mux_bank;
@@ -123,6 +138,10 @@ impl Grid {
 
     pub fn frame_complete(&self) -> bool {
         self.scan_slot == 0
+    }
+
+    pub fn process_inputs(&mut self) {
+        self.inputs.service();
     }
 
     pub fn poll_event(&mut self) -> Option<GridEvent> {
@@ -279,22 +298,11 @@ fn spi3_transfer_8(tx: &[u8]) {
     for byte in &tx[..8] {
         while !pac::SPI3.sr().read().txe() {}
         unsafe { core::ptr::write_volatile(dr_ptr, *byte) };
-
-        while !pac::SPI3.sr().read().rxne() {}
-        let _ = unsafe { core::ptr::read_volatile(dr_ptr) };
     }
 
     while pac::SPI3.sr().read().bsy() {}
     let _ = unsafe { core::ptr::read_volatile(dr_ptr) };
     let _ = pac::SPI3.sr().read();
-}
-
-fn write_active_low_c(pin: u16, low: bool) {
-    if low {
-        gpio_reset_c(pin);
-    } else {
-        gpio_set_c(pin);
-    }
 }
 
 fn gpio_set_b(pins: u16) {

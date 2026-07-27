@@ -30,10 +30,10 @@ static MIDI_QUEUE: StaticCell<Queue<MidiEvent, MIDI_QUEUE_SIZE>> = StaticCell::n
 static SYSEX_QUEUE: StaticCell<Queue<SysexMessage, SYSEX_QUEUE_SIZE>> = StaticCell::new();
 
 const SYSEX_MAX_LEN: usize = 256;
-const MIDI_QUEUE_SIZE: usize = 1025;
-const SYSEX_QUEUE_SIZE: usize = 5;
+const MIDI_QUEUE_SIZE: usize = 1024;
+const SYSEX_QUEUE_SIZE: usize = 4;
 const MIDI_TX_MAX_LEN: usize = 256;
-const MIDI_TX_QUEUE_SIZE: usize = 17;
+const MIDI_TX_QUEUE_SIZE: usize = 16;
 
 pub struct SysexMessage {
     pub port: MidiPort,
@@ -318,17 +318,13 @@ fn flush_sysex(sysex_buf: &mut [u8; SYSEX_MAX_LEN], sysex_len: &mut usize, port:
 }
 
 fn enqueue_midi_event(event: MidiEvent) -> Result<(), MidiEvent> {
-    let mut event = Some(event);
-
-    match MIDI_PRODUCER.with_mut(|producer| producer.enqueue(event.take().unwrap())) {
-        Some(result) => result,
-        None => Err(event.unwrap()),
-    }
+    MIDI_PRODUCER
+        .with_mut(|producer| producer.enqueue(event))
+        .unwrap_or(Err(event))
 }
 
 fn enqueue_sysex_message(message: SysexMessage) -> Result<(), SysexMessage> {
     let mut message = Some(message);
-
     match SYSEX_PRODUCER.with_mut(|producer| producer.enqueue(message.take().unwrap())) {
         Some(result) => result,
         None => Err(message.unwrap()),
