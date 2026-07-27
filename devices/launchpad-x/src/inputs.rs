@@ -519,30 +519,55 @@ fn idx_to_yx(index: u8) -> u8 {
     (9 - (index / 10)) * 10 + (index % 10)
 }
 
+#[inline(always)]
 fn normalize_raw_to_norm(raw: u16) -> u16 {
     if raw < 0x0097 {
         return 0;
     }
 
-    if raw >= 0x0dac {
-        return 0x0fff;
-    }
-
-    ((((raw - 0x0096) as u32) << 12) / 0x0d16) as u16
+    let val = (((raw - 0x0096) as u32) << 12) / 0x0d16;
+    usat12(val)
 }
 
+#[inline(always)]
+fn usat12(val: u32) -> u16 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "usat {0}, #12, {1}",
+            out(reg) res,
+            in(reg) val,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res as u16
+}
+
+#[inline(always)]
+fn usat7(val: u32) -> u8 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "usat {0}, #7, {1}",
+            out(reg) res,
+            in(reg) val,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res as u8
+}
+
+#[inline(always)]
 fn norm_to_velocity(norm: u16) -> u8 {
     if norm <= LP_PRESS_START_NORM {
         return 1;
     }
 
-    let mut value = (((norm - LP_PRESS_START_NORM) as u32) * LP_VELOCITY_GAIN_NUM) / 0x0ed4;
-    if value == 0 {
-        value = 1;
-    }
-    value.min(127) as u8
+    let value = (((norm - LP_PRESS_START_NORM) as u32) * LP_VELOCITY_GAIN_NUM) / 0x0ed4;
+    usat7(value).max(1)
 }
 
+#[inline(always)]
 fn norm_to_aftertouch(norm: u16) -> u8 {
     if norm <= LP_AFTER_START_NORM {
         return 0;
@@ -561,7 +586,7 @@ fn norm_to_aftertouch(norm: u16) -> u8 {
         0
     };
 
-    (out16 >> 9).min(127) as u8
+    usat7(out16 >> 9)
 }
 
 fn median3(mut a: u16, mut b: u16, mut c: u16) -> u16 {
