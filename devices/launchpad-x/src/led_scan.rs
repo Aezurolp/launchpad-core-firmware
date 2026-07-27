@@ -54,7 +54,7 @@ fn TIM1_UP_TIM10() {
     if !pac::TIM1.sr().read().uif() {
         return;
     }
-    pac::TIM1.sr().write(|w| w.set_uif(false));
+    pac::TIM1.sr().write(|_| {});
 
     let grid = GRID.load(Ordering::Acquire);
     if grid.is_null() {

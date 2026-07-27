@@ -215,8 +215,8 @@ impl Inputs {
         pac::ADC1.smpr2().write(|_| {});
         pac::ADC1.sqr1().write(|w| w.set_l(7));
         pac::ADC1.sqr2().write(|w| {
-            w.set_sq(13, 6);
-            w.set_sq(14, 7);
+            w.set_sq(7, 6);
+            w.set_sq(8, 7);
         });
         pac::ADC1.sqr3().write(|w| {
             w.set_sq(1, 0);
@@ -593,8 +593,11 @@ fn clear_dma2_stream0_flags() {
 fn configure_dma2_stream0_cr() {
     pac::DMA2.st(0).cr().write(|w| {
         w.set_pl(pac::dma::vals::Pl::HIGH);
+        w.set_chsel(0);
         w.set_msize(pac::dma::vals::Size::BITS16);
         w.set_psize(pac::dma::vals::Size::BITS16);
         w.set_minc(true);
+        w.set_pinc(false);
+        w.set_dir(pac::dma::vals::Dir::PERIPHERAL_TO_MEMORY);
     });
 }

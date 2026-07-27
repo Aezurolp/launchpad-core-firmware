@@ -275,16 +275,17 @@ fn spi3_transfer_8(tx: &[u8]) {
         return;
     }
 
+    let dr_ptr = pac::SPI3.dr().as_ptr() as *mut u8;
     for byte in &tx[..8] {
         while !pac::SPI3.sr().read().txe() {}
-        pac::SPI3.dr().write(|w| w.set_dr(*byte as u16));
+        unsafe { core::ptr::write_volatile(dr_ptr, *byte) };
 
         while !pac::SPI3.sr().read().rxne() {}
-        let _ = pac::SPI3.dr().read();
+        let _ = unsafe { core::ptr::read_volatile(dr_ptr) };
     }
 
     while pac::SPI3.sr().read().bsy() {}
-    let _ = pac::SPI3.dr().read();
+    let _ = unsafe { core::ptr::read_volatile(dr_ptr) };
     let _ = pac::SPI3.sr().read();
 }
 
