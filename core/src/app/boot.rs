@@ -4,17 +4,20 @@
 use crate::app::{AftertouchEvent, App, AppId, MidiEvent, SurfaceEvent};
 use crate::sys::led;
 
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BootFrame {
     pub tick: u16,
     pub count: u8,
 }
 
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BootChange {
     pub led: u8,
     pub velocity: u8,
 }
+
 
 pub struct BootAnimation {
     pub frames: &'static [BootFrame],
