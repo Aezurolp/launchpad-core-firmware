@@ -13,11 +13,23 @@ test = false
 bench = false
 
 [dependencies]
-firmware-core = { path = "../../core", features = ["no-setup-btn", "pressure-sensitive", "rgb-color", "launchpad-x"] }
+firmware-core = { path = "../../core", features = [
+    "no-setup-btn",
+    "pressure-sensitive",
+    "rgb-color",
+    "launchpad-x",
+] }
 cortex-m.workspace = true
 cortex-m-rt.workspace = true
-embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
-embassy-stm32 = { version = "0.6.0", features = ["time-driver-tim4", "stm32f401re", "exti"] }
+embassy-executor = { version = "0.10.0", features = [
+    "platform-cortex-m",
+    "executor-thread",
+] }
+embassy-stm32 = { version = "0.6.0", features = [
+    "time-driver-tim4",
+    "stm32f401re",
+    "exti",
+] }
 embassy-sync = "0.8.0"
 embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"] }
 embassy-futures = "0.1.2"
@@ -27,3 +39,5 @@ stm32-metapac = { version = "21.0.0", features = ["stm32f401re"] }
 critical-section = "1.2.0"
 static_cell = "2.1.1"
 panic-halt = "1.0.0"
+embedded-storage = "0.3.1"
+spi-memory = "0.2.0"

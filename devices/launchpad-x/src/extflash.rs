@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-only
-// Copyright (C) 2025-2026 Anthony Hofmeister
-
 use core::cmp::min;
 
 use embassy_stm32::Peri;
@@ -11,12 +8,9 @@ use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::Hertz;
 
-const CMD_WRITE_ENABLE: u8 = 0x06;
-const CMD_READ_STATUS1: u8 = 0x05;
-const CMD_PAGE_PROGRAM: u8 = 0x02;
-const CMD_READ_DATA: u8 = 0x03;
-const CMD_SECTOR_ERASE: u8 = 0x20;
-const STATUS_WIP: u8 = 0x01;
+use embedded_storage::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
+use spi_memory::series25::Flash;
+use spi_memory::{BlockDevice, Read};
 
 const PAGE_SIZE: usize = 256;
 const SECTOR_SIZE: usize = 4096;
@@ -25,8 +19,7 @@ const SETTINGS_SIZE: u32 = 8 * 1024;
 const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
 
 pub struct ExtFlash<'d> {
-    spi: Spi<'d, Blocking, Master>,
-    cs: Output<'d>,
+    flash: Flash<Spi<'d, Blocking, Master>, Output<'d>>,
 }
 
 impl<'d> ExtFlash<'d> {
@@ -40,9 +33,11 @@ impl<'d> ExtFlash<'d> {
         let mut spi_cfg = SpiConfig::default();
         spi_cfg.frequency = Hertz(10_500_000);
 
+        let spi = Spi::new_blocking(spi2, pb13, pb15, pb14, spi_cfg);
+        let cs = Output::new(pb12, Level::High, Speed::VeryHigh);
+
         Self {
-            spi: Spi::new_blocking(spi2, pb13, pb15, pb14, spi_cfg),
-            cs: Output::new(pb12, Level::High, Speed::VeryHigh),
+            flash: Flash::init(spi, cs).unwrap(),
         }
     }
 
@@ -61,7 +56,9 @@ impl<'d> ExtFlash<'d> {
         }
 
         let readable = min((SETTINGS_SIZE - offset) as usize, data.len());
-        self.read(SETTINGS_OFFSET + offset, &mut data[..readable]);
+        let _ = self
+            .flash
+            .read(SETTINGS_OFFSET + offset, &mut data[..readable]);
 
         if readable < data.len() {
             data[readable..].fill(0xff);
@@ -84,21 +81,21 @@ impl<'d> ExtFlash<'d> {
             let in_sector = (abs_off - sector_base) as usize;
             let chunk = min(writable, SECTOR_SIZE - in_sector);
 
-            self.read(sector_base, &mut sector_buf);
+            let _ = self.flash.read(sector_base, &mut sector_buf);
 
             if sector_buf[in_sector..in_sector + chunk] != src[..chunk] {
                 sector_buf[in_sector..in_sector + chunk].copy_from_slice(&src[..chunk]);
-                self.erase_sector(sector_base);
+                let _ = self.flash.erase_sectors(sector_base, 1);
 
                 for page_off in (0..SECTOR_SIZE).step_by(PAGE_SIZE) {
                     if !sector_buf[page_off..page_off + PAGE_SIZE]
                         .iter()
                         .all(|byte| *byte == 0xff)
                     {
-                        let page = sector_buf[page_off..page_off + PAGE_SIZE]
-                            .try_into()
-                            .unwrap();
-                        self.write_page(sector_base + page_off as u32, page);
+                        let _ = self.flash.write_bytes(
+                            sector_base + page_off as u32,
+                            &mut sector_buf[page_off..page_off + PAGE_SIZE],
+                        );
                     }
                 }
             }
@@ -108,82 +105,43 @@ impl<'d> ExtFlash<'d> {
             writable -= chunk;
         }
     }
+}
 
-    fn select(&mut self) {
-        self.cs.set_low();
+impl ErrorType for ExtFlash<'_> {
+    type Error = NorFlashErrorKind;
+}
+
+impl ReadNorFlash for ExtFlash<'_> {
+    const READ_SIZE: usize = 1;
+
+    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        self.read_settings(offset, bytes);
+        Ok(())
     }
 
-    fn deselect(&mut self) {
-        self.cs.set_high();
+    fn capacity(&self) -> usize {
+        SETTINGS_SIZE as usize
+    }
+}
+
+impl NorFlash for ExtFlash<'_> {
+    const WRITE_SIZE: usize = 1;
+    const ERASE_SIZE: usize = SECTOR_SIZE;
+
+    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.write_settings(offset, bytes);
+        Ok(())
     }
 
-    fn xfer(&mut self, byte: u8) -> u8 {
-        let mut data = [byte];
-        self.spi.blocking_transfer_in_place(&mut data).unwrap();
-        data[0]
-    }
-
-    fn wait_busy(&mut self) {
-        for _ in 0..100_000 {
-            self.select();
-            self.xfer(CMD_READ_STATUS1);
-            let status = self.xfer(0xff);
-            self.deselect();
-
-            if status & STATUS_WIP == 0 {
-                return;
-            }
+    fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        if from % (SECTOR_SIZE as u32) != 0 || to % (SECTOR_SIZE as u32) != 0 || from >= to {
+            return Err(NorFlashErrorKind::NotAligned);
         }
-    }
-
-    fn write_enable(&mut self) {
-        self.select();
-        self.xfer(CMD_WRITE_ENABLE);
-        self.deselect();
-    }
-
-    fn erase_sector(&mut self, offset: u32) {
-        self.wait_busy();
-        self.write_enable();
-
-        self.select();
-        self.xfer(CMD_SECTOR_ERASE);
-        self.write_addr(offset);
-        self.deselect();
-
-        self.wait_busy();
-    }
-
-    fn write_page(&mut self, offset: u32, data: &[u8; PAGE_SIZE]) {
-        self.wait_busy();
-        self.write_enable();
-
-        self.select();
-        self.xfer(CMD_PAGE_PROGRAM);
-        self.write_addr(offset);
-        for byte in data {
-            self.xfer(*byte);
+        let mut sector_addr = from;
+        while sector_addr < to {
+            let _ = self.flash.erase_sectors(SETTINGS_OFFSET + sector_addr, 1);
+            sector_addr += SECTOR_SIZE as u32;
         }
-        self.deselect();
-
-        self.wait_busy();
-    }
-
-    fn read(&mut self, offset: u32, data: &mut [u8]) {
-        self.wait_busy();
-
-        self.select();
-        self.xfer(CMD_READ_DATA);
-        self.write_addr(offset);
-        for byte in data {
-            *byte = self.xfer(0xff);
-        }
-        self.deselect();
-    }
-
-    fn write_addr(&mut self, offset: u32) {
-        self.xfer((offset >> 16) as u8);
-        self.xfer((offset >> 8) as u8);
-        self.xfer(offset as u8);
+        Ok(())
     }
 }
