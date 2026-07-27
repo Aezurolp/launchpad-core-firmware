@@ -215,16 +215,16 @@ impl Inputs {
         pac::ADC1.smpr2().write(|_| {});
         pac::ADC1.sqr1().write(|w| w.set_l(7));
         pac::ADC1.sqr2().write(|w| {
-            w.set_sq(7, 6);
-            w.set_sq(8, 7);
+            w.set_sq(0, 6); // SQ7 = ch6
+            w.set_sq(1, 7); // SQ8 = ch7
         });
         pac::ADC1.sqr3().write(|w| {
-            w.set_sq(1, 0);
-            w.set_sq(2, 1);
-            w.set_sq(3, 2);
-            w.set_sq(4, 3);
-            w.set_sq(5, 4);
-            w.set_sq(6, 5);
+            w.set_sq(0, 0); // SQ1 = ch0
+            w.set_sq(1, 1); // SQ2 = ch1
+            w.set_sq(2, 2); // SQ3 = ch2
+            w.set_sq(3, 3); // SQ4 = ch3
+            w.set_sq(4, 4); // SQ5 = ch4
+            w.set_sq(5, 5); // SQ6 = ch5
         });
         pac::ADC1.cr2().modify(|w| w.set_adon(true));
     }
