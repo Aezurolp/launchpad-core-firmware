@@ -404,9 +404,9 @@ impl Inputs {
         if filt == 0 {
             filt = norm;
         } else if norm >= filt {
-            filt = ((filt as u32 + norm as u32 + 1) / 2) as u16;
+            filt = ((filt as u32 + norm as u32 + 1) >> 1) as u16;
         } else {
-            filt = (((filt as u32) * 7 + norm as u32 + 4) / 8) as u16;
+            filt = (smlabb(filt as u32, 7, norm as u32 + 4) >> 3) as u16;
         }
         self.grid_filt[sensor] = filt;
 
@@ -419,10 +419,10 @@ impl Inputs {
         let mut base = self.grid_base[sensor];
         if filt > base {
             if filt - base < LP_BASELINE_GUARD && !self.grid_pressed[sensor] {
-                base = (((base as u32) * 31 + filt as u32 + 16) / 32) as u16;
+                base = (smlabb(base as u32, 31, filt as u32 + 16) >> 5) as u16;
             }
         } else if !self.grid_pressed[sensor] {
-            base = (((base as u32) * 31 + filt as u32 + 16) / 32) as u16;
+            base = (smlabb(base as u32, 31, filt as u32 + 16) >> 5) as u16;
         }
         self.grid_base[sensor] = base;
 
@@ -588,18 +588,25 @@ fn norm_to_aftertouch(norm: u16) -> u8 {
 
     usat7(out16 >> 9)
 }
+#[inline(always)]
+fn smlabb(x: u32, y: u32, acc: u32) -> u32 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "smlabb {0}, {1}, {2}, {3}",
+            out(reg) res,
+            in(reg) x,
+            in(reg) y,
+            in(reg) acc,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res
+}
 
-fn median3(mut a: u16, mut b: u16, mut c: u16) -> u16 {
-    if a > b {
-        core::mem::swap(&mut a, &mut b);
-    }
-    if b > c {
-        core::mem::swap(&mut b, &mut c);
-    }
-    if a > b {
-        core::mem::swap(&mut a, &mut b);
-    }
-    b
+#[inline(always)]
+fn median3(a: u16, b: u16, c: u16) -> u16 {
+    a.max(b.min(c)).min(b.max(c))
 }
 
 fn clear_dma2_stream0_flags() {
