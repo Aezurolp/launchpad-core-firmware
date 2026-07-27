@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026      ZephyrCodesStuff + Gemini 3.6 Flash
 
 use core::cell::UnsafeCell;
 
@@ -110,16 +111,19 @@ pub fn init_event_queues() {
     }
 }
 
+/// Dequeue an item from the given consumer handle slot.
+///
+/// Returns `None` if the consumer is not initialized or if the queue is empty.
+fn dequeue<T>(consumer: &HandleSlot<Consumer<'static, T>>) -> Option<T> {
+    consumer.with_mut(|c| c.dequeue()).flatten()
+}
+
 pub fn dequeue_midi_event() -> Option<MidiEvent> {
-    MIDI_CONSUMER
-        .with_mut(|consumer| consumer.dequeue())
-        .flatten()
+    dequeue(&MIDI_CONSUMER)
 }
 
 pub fn dequeue_sysex_message() -> Option<SysexMessage> {
-    SYSEX_CONSUMER
-        .with_mut(|consumer| consumer.dequeue())
-        .flatten()
+    dequeue(&SYSEX_CONSUMER)
 }
 
 pub fn enqueue_tx_message(port: u8, data: &[u8]) -> Result<(), ()> {

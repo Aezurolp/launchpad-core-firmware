@@ -1313,6 +1313,7 @@ version = "1.0.1"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "critical-section",
  "embassy-executor",
  "embassy-futures",
  "embassy-stm32",
@@ -1323,6 +1324,7 @@ dependencies = [
  "heapless 0.9.3",
  "panic-halt",
  "static_cell",
+ "stm32-metapac",
 ]
 
 [[package]]
