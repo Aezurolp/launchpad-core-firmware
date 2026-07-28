@@ -74,5 +74,8 @@ lto = "fat"
 [profile.release.package.launchpad-x]
 opt-level = 3
 
+[profile.release.package.launchpad-mini-mk3]
+opt-level = 3
+
 [profile.release.package.launchpad-pro-mk3]
 opt-level = 3

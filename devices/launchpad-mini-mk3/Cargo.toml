@@ -23,5 +23,9 @@ embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"] }
 embassy-futures = "0.1.2"
 embassy-usb = "0.6.0"
 heapless = "0.9.3"
+stm32-metapac = { version = "21.0.0", features = ["stm32f401re"] }
+critical-section = "1.2.0"
+embedded-storage = "0.3.1"
+spi-memory = "0.2.0"
 static_cell = "2.1.1"
 panic-halt = "1.0.0"
