@@ -95,6 +95,10 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
     }
 
     pub fn route_surface_event(&mut self, event: SurfaceEvent) {
+        if (event.index != 0) {
+            self.active_app_mut().on_surface(event);
+        }
+
         #[cfg(feature = "no-setup-btn")]
         if self.handle_setup_hold_button(&event) {
             return;
@@ -105,7 +109,6 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
             return;
         }
 
-        self.active_app_mut().on_surface(event);
         self.apply_requested_app_switch();
     }
 
@@ -253,6 +256,15 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
         if self.setup_hold_ticks >= SETUP_HOLD_TICKS {
             self.setup_hold_active = false;
             self.setup_hold_ticks = 0;
+
+            self.route_surface_event(
+                SurfaceEvent {
+                    pressed: false,
+                    index: 95,
+                    value: 0
+                }
+            );
+
             self.switch(AppId::Setup);
         }
     }
