@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
-use core::ptr;
+use stm32_metapac as pac;
 
 use crate::inputs::{GridEvent, Inputs};
 use crate::leds::Leds;
@@ -35,33 +36,6 @@ const MUX_SET_MASK: [u16; 8] = [
 const MUX_RESET_MASK: [u16; 8] = [
     0x00e0, 0x00c0, 0x00a0, 0x0080, 0x0060, 0x0040, 0x0020, 0x0000,
 ];
-
-const RCC_AHB1ENR: *mut u32 = 0x4002_3830 as *mut u32;
-const RCC_APB1ENR: *mut u32 = 0x4002_3840 as *mut u32;
-const GPIOB_BASE: u32 = 0x4002_0400;
-const GPIOC_BASE: u32 = 0x4002_0800;
-const SPI3_BASE: u32 = 0x4000_3c00;
-const MODER: u32 = 0x00;
-const OSPEEDR: u32 = 0x08;
-const PUPDR: u32 = 0x0c;
-const IDR: u32 = 0x10;
-const BSRR: u32 = 0x18;
-const AFRH: u32 = 0x24;
-const SPI_CR1: *mut u32 = (SPI3_BASE + 0x00) as *mut u32;
-const SPI_SR: *mut u32 = (SPI3_BASE + 0x08) as *mut u32;
-const SPI_DR: *mut u32 = (SPI3_BASE + 0x0c) as *mut u32;
-
-const RCC_AHB1ENR_GPIOBEN: u32 = 1 << 1;
-const RCC_AHB1ENR_GPIOCEN: u32 = 1 << 2;
-const RCC_APB1ENR_SPI3EN: u32 = 1 << 15;
-const SPI_CR1_MSTR: u32 = 1 << 2;
-const SPI_CR1_BR_1: u32 = 1 << 4;
-const SPI_CR1_SPE: u32 = 1 << 6;
-const SPI_CR1_SSI: u32 = 1 << 8;
-const SPI_CR1_SSM: u32 = 1 << 9;
-const SPI_SR_RXNE: u32 = 1 << 0;
-const SPI_SR_TXE: u32 = 1 << 1;
-const SPI_SR_BSY: u32 = 1 << 7;
 
 pub struct Grid {
     scan_slot: u8,
@@ -113,12 +87,10 @@ impl Grid {
         self.inputs
             .capture_side(group, capture_row, sample_side_inputs());
 
-        unsafe {
-            gpio_reset(GPIOC_BASE, 1 << 11);
-            gpio_set(GPIOB_BASE, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 10));
-            gpio_reset(GPIOB_BASE, MUX_RESET_MASK[mux_bank as usize]);
-            gpio_set(GPIOB_BASE, MUX_SET_MASK[mux_bank as usize]);
-        }
+        gpio_reset_c(1 << 11);
+        gpio_set_b((1 << 0) | (1 << 1) | (1 << 2) | (1 << 10));
+        gpio_reset_b(MUX_RESET_MASK[mux_bank as usize]);
+        gpio_set_b(MUX_SET_MASK[mux_bank as usize]);
 
         self.active_mux_bank = mux_bank;
         self.mux_bank = (mux_bank + 1) & 0x07;
@@ -132,13 +104,26 @@ impl Grid {
         let phase = SCAN_PHASE_LUT[self.scan_slot as usize];
         let phase_mask = 1u8 << phase;
 
-        unsafe {
-            write_active_low(GPIOC_BASE, 1 << 7, (self.leds.overlay_r & phase_mask) != 0);
-            write_active_low(GPIOC_BASE, 1 << 8, (self.leds.overlay_g & phase_mask) != 0);
-            write_active_low(GPIOC_BASE, 1 << 9, (self.leds.overlay_b & phase_mask) != 0);
-            gpio_set(GPIOC_BASE, 1 << 11);
-            gpio_reset(GPIOB_BASE, ROW_MASK[row]);
-        }
+        let pc_bsrr = (1 << 11)
+            | (if (self.leds.overlay_r & phase_mask) != 0 {
+                1 << (7 + 16)
+            } else {
+                1 << 7
+            })
+            | (if (self.leds.overlay_g & phase_mask) != 0 {
+                1 << (8 + 16)
+            } else {
+                1 << 8
+            })
+            | (if (self.leds.overlay_b & phase_mask) != 0 {
+                1 << (9 + 16)
+            } else {
+                1 << 9
+            });
+        pac::GPIOC
+            .bsrr()
+            .write_value(pac::gpio::regs::Bsrr(pc_bsrr));
+        gpio_reset_b(ROW_MASK[row]);
 
         self.pressure_pending_bank = self.active_mux_bank;
         self.pressure_pending_valid = true;
@@ -153,6 +138,10 @@ impl Grid {
 
     pub fn frame_complete(&self) -> bool {
         self.scan_slot == 0
+    }
+
+    pub fn process_inputs(&mut self) {
+        self.inputs.service();
     }
 
     pub fn poll_event(&mut self) -> Option<GridEvent> {
@@ -189,8 +178,7 @@ impl Grid {
     }
 
     fn brightness_index(&self) -> usize {
-        let raw = (self.leds.brightness().min(8) as u16 * 255 / 8) as u8;
-        ((9 * raw as u16) >> 8) as usize
+        self.leds.brightness().min(8) as usize
     }
 }
 
@@ -198,98 +186,96 @@ fn flip_index(index: u8) -> u8 {
     (index % 10) + (9 - (index / 10)) * 10
 }
 
-fn init_led_hardware() {
-    unsafe {
-        modify_reg(RCC_AHB1ENR, |value| {
-            value | RCC_AHB1ENR_GPIOBEN | RCC_AHB1ENR_GPIOCEN
-        });
-        modify_reg(RCC_APB1ENR, |value| value | RCC_APB1ENR_SPI3EN);
-
-        configure_gpio_af(GPIOC_BASE, 10, 6);
-        configure_gpio_af(GPIOC_BASE, 12, 6);
-
-        for pin in [0, 1, 2, 5, 6, 7, 10] {
-            configure_gpio_output(GPIOB_BASE, pin);
-        }
-        for pin in [7, 8, 9, 11] {
-            configure_gpio_output(GPIOC_BASE, pin);
-        }
-        for pin in [0, 1, 2, 3] {
-            configure_gpio_input(GPIOC_BASE, pin);
-        }
-
-        gpio_set(GPIOB_BASE, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 10));
-        gpio_set(GPIOC_BASE, (1 << 7) | (1 << 8) | (1 << 9));
-        gpio_reset(GPIOC_BASE, 1 << 11);
-        gpio_reset(GPIOB_BASE, (1 << 5) | (1 << 6) | (1 << 7));
-
-        write_reg(
-            SPI_CR1,
-            SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_BR_1,
-        );
-        modify_reg(SPI_CR1, |value| value | SPI_CR1_SPE);
-    }
-}
-
-unsafe fn configure_gpio_af(port: u32, pin: u8, af: u8) {
-    unsafe {
-        let mode_shift = (pin as u32) * 2;
-        modify_reg((port + MODER) as *mut u32, |value| {
-            (value & !(0b11 << mode_shift)) | (0b10 << mode_shift)
-        });
-        modify_reg((port + OSPEEDR) as *mut u32, |value| {
-            (value & !(0b11 << mode_shift)) | (0b11 << mode_shift)
-        });
-        modify_reg((port + PUPDR) as *mut u32, |value| {
-            value & !(0b11 << mode_shift)
-        });
-
-        let afr_shift = ((pin - 8) as u32) * 4;
-        modify_reg((port + AFRH) as *mut u32, |value| {
-            (value & !(0x0f << afr_shift)) | ((af as u32) << afr_shift)
-        });
-    }
-}
-
-unsafe fn configure_gpio_output(port: u32, pin: u8) {
-    unsafe {
-        let shift = (pin as u32) * 2;
-        modify_reg((port + MODER) as *mut u32, |value| {
-            (value & !(0b11 << shift)) | (0b01 << shift)
-        });
-        modify_reg((port + OSPEEDR) as *mut u32, |value| {
-            (value & !(0b11 << shift)) | (0b11 << shift)
-        });
-        modify_reg((port + PUPDR) as *mut u32, |value| value & !(0b11 << shift));
-    }
-}
-
-unsafe fn configure_gpio_input(port: u32, pin: u8) {
-    unsafe {
-        let shift = (pin as u32) * 2;
-        modify_reg((port + MODER) as *mut u32, |value| value & !(0b11 << shift));
-        modify_reg((port + PUPDR) as *mut u32, |value| value & !(0b11 << shift));
-    }
-}
+const SIDE_INPUT_LUT: [u16; 16] = [
+    0x0000, 0x0001, 0x0010, 0x0011, 0x0100, 0x0101, 0x0110, 0x0111, 0x1000, 0x1001, 0x1010, 0x1011,
+    0x1100, 0x1101, 0x1110, 0x1111,
+];
 
 fn sample_side_inputs() -> u16 {
-    let idr = unsafe { read_reg((GPIOC_BASE + IDR) as *mut u32) };
-    let mut sample = 0u16;
+    let idr = (pac::GPIOC.idr().read().0 & 0x0F) as usize;
+    SIDE_INPUT_LUT[idr]
+}
 
-    if idr & (1 << 0) != 0 {
-        sample |= 0x0001;
+fn init_led_hardware() {
+    critical_section::with(|_cs| {
+        pac::RCC.ahb1enr().modify(|w| {
+            w.set_gpioben(true);
+            w.set_gpiocen(true);
+        });
+        pac::RCC.apb1enr().modify(|w| w.set_spi3en(true));
+    });
+
+    configure_gpio_af_c(10, 6);
+    configure_gpio_af_c(12, 6);
+
+    for pin in [0, 1, 2, 5, 6, 7, 10] {
+        configure_gpio_output_b(pin);
     }
-    if idr & (1 << 1) != 0 {
-        sample |= 0x0010;
+    for pin in [7, 8, 9, 11] {
+        configure_gpio_output_c(pin);
     }
-    if idr & (1 << 2) != 0 {
-        sample |= 0x0100;
-    }
-    if idr & (1 << 3) != 0 {
-        sample |= 0x1000;
+    for pin in [0, 1, 2, 3] {
+        configure_gpio_input_c(pin);
     }
 
-    sample
+    gpio_set_b((1 << 0) | (1 << 1) | (1 << 2) | (1 << 10));
+    gpio_set_c((1 << 7) | (1 << 8) | (1 << 9));
+    gpio_reset_c(1 << 11);
+    gpio_reset_b((1 << 5) | (1 << 6) | (1 << 7));
+
+    pac::SPI3.cr1().write(|w| {
+        w.set_mstr(pac::spi::vals::Mstr::MASTER);
+        w.set_ssm(true);
+        w.set_ssi(true);
+        w.set_br(pac::spi::vals::Br::DIV8);
+    });
+    pac::SPI3.cr1().modify(|w| w.set_spe(true));
+}
+
+fn configure_gpio_af_c(pin: usize, af: u8) {
+    pac::GPIOC
+        .moder()
+        .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::ALTERNATE));
+    pac::GPIOC
+        .ospeedr()
+        .modify(|w| w.set_ospeedr(pin, pac::gpio::vals::Ospeedr::VERY_HIGH_SPEED));
+    pac::GPIOC
+        .pupdr()
+        .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
+    pac::GPIOC.afr(pin / 8).modify(|w| w.set_afr(pin % 8, af));
+}
+
+fn configure_gpio_output_b(pin: usize) {
+    pac::GPIOB
+        .moder()
+        .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::OUTPUT));
+    pac::GPIOB
+        .ospeedr()
+        .modify(|w| w.set_ospeedr(pin, pac::gpio::vals::Ospeedr::VERY_HIGH_SPEED));
+    pac::GPIOB
+        .pupdr()
+        .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
+}
+
+fn configure_gpio_output_c(pin: usize) {
+    pac::GPIOC
+        .moder()
+        .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::OUTPUT));
+    pac::GPIOC
+        .ospeedr()
+        .modify(|w| w.set_ospeedr(pin, pac::gpio::vals::Ospeedr::VERY_HIGH_SPEED));
+    pac::GPIOC
+        .pupdr()
+        .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
+}
+
+fn configure_gpio_input_c(pin: usize) {
+    pac::GPIOC
+        .moder()
+        .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::INPUT));
+    pac::GPIOC
+        .pupdr()
+        .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
 }
 
 fn spi3_transfer_8(tx: &[u8]) {
@@ -297,56 +283,37 @@ fn spi3_transfer_8(tx: &[u8]) {
         return;
     }
 
-    unsafe {
-        for byte in &tx[..8] {
-            while read_reg(SPI_SR) & SPI_SR_TXE == 0 {}
-            ptr::write_volatile(SPI_DR as *mut u8, *byte);
-
-            while read_reg(SPI_SR) & SPI_SR_RXNE == 0 {}
-            let _ = ptr::read_volatile(SPI_DR as *mut u8);
-        }
-
-        while read_reg(SPI_SR) & SPI_SR_BSY != 0 {}
-        let _ = read_reg(SPI_DR);
-        let _ = read_reg(SPI_SR);
+    let dr_ptr = pac::SPI3.dr().as_ptr() as *mut u8;
+    for byte in &tx[..8] {
+        while !pac::SPI3.sr().read().txe() {}
+        unsafe { core::ptr::write_volatile(dr_ptr, *byte) };
     }
+
+    while pac::SPI3.sr().read().bsy() {}
+    let _ = unsafe { core::ptr::read_volatile(dr_ptr) };
+    let _ = pac::SPI3.sr().read();
 }
 
-unsafe fn write_active_low(port: u32, pin: u16, low: bool) {
-    unsafe {
-        if low {
-            gpio_reset(port, pin);
-        } else {
-            gpio_set(port, pin);
-        }
-    }
+fn gpio_set_b(pins: u16) {
+    pac::GPIOB
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr(pins as u32));
 }
 
-unsafe fn gpio_set(port: u32, pins: u16) {
-    unsafe {
-        write_reg((port + BSRR) as *mut u32, pins as u32);
-    }
+fn gpio_reset_b(pins: u16) {
+    pac::GPIOB
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr((pins as u32) << 16));
 }
 
-unsafe fn gpio_reset(port: u32, pins: u16) {
-    unsafe {
-        write_reg((port + BSRR) as *mut u32, (pins as u32) << 16);
-    }
+fn gpio_set_c(pins: u16) {
+    pac::GPIOC
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr(pins as u32));
 }
 
-unsafe fn read_reg(reg: *mut u32) -> u32 {
-    unsafe { ptr::read_volatile(reg) }
-}
-
-unsafe fn write_reg(reg: *mut u32, value: u32) {
-    unsafe {
-        ptr::write_volatile(reg, value);
-    }
-}
-
-unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
-    unsafe {
-        let value = ptr::read_volatile(reg);
-        ptr::write_volatile(reg, f(value));
-    }
+fn gpio_reset_c(pins: u16) {
+    pac::GPIOC
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr((pins as u32) << 16));
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
 #![no_std]
 #![no_main]
@@ -78,7 +79,7 @@ async fn main(spawner: Spawner) {
     )));
     app_host.lock().await.init();
 
-    led_scan::start(grid as *mut grid::Grid);
+    led_scan::start(grid);
 
     let mut ticker = Ticker::every(Duration::from_millis(1));
 
@@ -88,6 +89,7 @@ async fn main(spawner: Spawner) {
         let mut app_host_guard = app_host.lock().await;
         app_host_guard.route_tick_event();
 
+        grid.process_inputs();
         while let Some(event) = grid.poll_event() {
             match event {
                 inputs::GridEvent::Press { note, value } => {

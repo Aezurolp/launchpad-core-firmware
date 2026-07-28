@@ -1,9 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
 const LP_LED_COUNT: usize = 100;
 const LP_LED_BITS: usize = 256;
 const LP_LED_PLANES: usize = 6;
+
+// ARM Cortex-M4 Quad 8-bit SIMD Color Helpers (1 clock cycle per 4 channels)
+#[inline(always)]
+pub fn blend_rgb_50_50(color_a: u32, color_b: u32) -> u32 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "uhadd8 {0}, {1}, {2}",
+            out(reg) res,
+            in(reg) color_a,
+            in(reg) color_b,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res
+}
+
+#[inline(always)]
+pub fn add_rgb_saturating(color_a: u32, color_b: u32) -> u32 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "uqadd8 {0}, {1}, {2}",
+            out(reg) res,
+            in(reg) color_a,
+            in(reg) color_b,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res
+}
 
 const OVERLAY_INDEX: u16 = 0x270e;
 

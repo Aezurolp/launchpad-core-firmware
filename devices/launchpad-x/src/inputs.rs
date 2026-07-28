@@ -1,23 +1,82 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
-use core::ptr;
+use stm32_metapac as pac;
 
+// ----------------------------
+// Hardware Definitions
+// ----------------------------
+
+/// Size of the physical 10x10 pad layout mapping table.
 const LP_LED_COUNT: usize = 100;
+
+/// Total 8x8 FSR pressure sensors
 const LP_GRID_SENSOR_COUNT: usize = 64;
+
+/// Total digital side/top buttons (16 buttons).
 const LP_SIMPLE_BTN_COUNT: usize = 16;
+
+/// Number of analog ADC DMA channels sampled per multiplexer bank.
 const LP_ADC_CHANNELS: usize = 8;
+
+/// Size of the lock-free SPSC event ring buffer queue for grid press/release events.
 const LP_GRID_QUEUE_LEN: usize = 64;
 
-const LP_PRESS_START_NORM: u16 = 0x012c;
-const LP_PRESS_RELEASE_NORM: u16 = 0x0090;
-const LP_AFTER_START_NORM: u16 = 0x0259;
-const LP_AFTER_DELTA_THR: u8 = 3;
+// ----------------------------
+// DSP, Calibration & Sensitivity Tuning Thresholds
+// ----------------------------
+
+/// Minimum pressure required to trigger a Note On.
+///
+/// Resting fingers or light touches below this value are ignored.
+const LP_PRESS_START_NORM: u16 = 300;
+
+/// Pressure threshold to trigger a Note Off.
+///
+/// Using a lower release threshold than start threshold creates hysteresis,
+/// preventing rapid note flickering when a pad is lightly held.
+const LP_PRESS_RELEASE_NORM: u16 = 144;
+
+/// Debounce sample counter required before confirming a press.
 const LP_PRESS_ON_COUNT: u8 = 1;
+
+/// Debounce sample counter required before confirming a release.
 const LP_RELEASE_COUNT: u8 = 8;
-const LP_RELEASE_HOLDOFF: u8 = 10;
+
+// ----------------------------
+// Polyphonic Aftertouch Filtering
+// ----------------------------
+
+/// Pressure threshold before Polyphonic Aftertouch MIDI messages start sending.
+const LP_AFTER_START_NORM: u16 = 601;
+
+/// Minimum pressure change required before sending a new Aftertouch message (prevents spamming the USB MIDI bus with minor noise).
+const LP_AFTER_DELTA_THR: u8 = 3;
+
+/// Minimum clock ticks between consecutive Aftertouch events per pad.
 const LP_AFTER_COOLDOWN: u8 = 2;
-const LP_BASELINE_GUARD: u16 = 0x0060;
+
+/// Ticks immediately following a press during which release events are suppressed.
+const LP_RELEASE_HOLDOFF: u8 = 10;
+
+// ----------------------------
+// FSR (Force-Sensitive Resistors) Dynamic Recalibration
+// ----------------------------
+
+/// Force-Sensitive Resistors drift due to ambient temperature and mechanical relaxation.
+///
+/// If pad force is ≤ 96, the algorithm slowly recalibrates the zero-pressure baseline (grid_base).
+///
+/// When pressed harder (> 96), baseline tracking freezes so presses don't corrupt the zero point.
+const LP_BASELINE_GUARD: u16 = 96;
+
+// ----------------------------
+// Non-Linear Velocity & Pressure Curves
+// ----------------------------
+
+// Coefficients used to map raw 12-bit ADC readings (0..4095) into 7-bit MIDI velocity (1..127)
+// using a logarithmic/curved response matching human finger dynamics.
 const LP_AFTER_FLOOR_16: u32 = 0x2222;
 const LP_VELOCITY_GAIN_NUM: u32 = 140;
 
@@ -30,59 +89,6 @@ const PAD_SCAN_MAP: [u8; LP_LED_COUNT] = [
     0xff, 0x26, 0x2e, 0x36, 0x3e, 0x27, 0x2f, 0x37, 0x3f, 0x8f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff,
 ];
-
-const RCC_AHB1ENR: *mut u32 = 0x4002_3830 as *mut u32;
-const RCC_APB2ENR: *mut u32 = 0x4002_3844 as *mut u32;
-const GPIOA_MODER: *mut u32 = 0x4002_0000 as *mut u32;
-const GPIOA_PUPDR: *mut u32 = 0x4002_000c as *mut u32;
-const DMA2_LISR: *mut u32 = 0x4002_6400 as *mut u32;
-const DMA2_LIFCR: *mut u32 = 0x4002_6408 as *mut u32;
-const DMA2_STREAM0_CR: *mut u32 = 0x4002_6410 as *mut u32;
-const DMA2_STREAM0_NDTR: *mut u32 = 0x4002_6414 as *mut u32;
-const DMA2_STREAM0_PAR: *mut u32 = 0x4002_6418 as *mut u32;
-const DMA2_STREAM0_M0AR: *mut u32 = 0x4002_641c as *mut u32;
-const DMA2_STREAM0_FCR: *mut u32 = 0x4002_6424 as *mut u32;
-const ADC_CCR: *mut u32 = 0x4001_2304 as *mut u32;
-const ADC1_SR: *mut u32 = 0x4001_2000 as *mut u32;
-const ADC1_CR1: *mut u32 = 0x4001_2004 as *mut u32;
-const ADC1_CR2: *mut u32 = 0x4001_2008 as *mut u32;
-const ADC1_SMPR2: *mut u32 = 0x4001_2010 as *mut u32;
-const ADC1_SQR1: *mut u32 = 0x4001_202c as *mut u32;
-const ADC1_SQR2: *mut u32 = 0x4001_2030 as *mut u32;
-const ADC1_SQR3: *mut u32 = 0x4001_2034 as *mut u32;
-const ADC1_DR: *mut u32 = 0x4001_204c as *mut u32;
-
-const RCC_AHB1ENR_GPIOAEN: u32 = 1 << 0;
-const RCC_AHB1ENR_DMA2EN: u32 = 1 << 22;
-const RCC_APB2ENR_ADC1EN: u32 = 1 << 8;
-const DMA_SXCR_EN: u32 = 1 << 0;
-const DMA_SXCR_MINC: u32 = 1 << 10;
-const DMA_SXCR_PSIZE_0: u32 = 1 << 11;
-const DMA_SXCR_MSIZE_0: u32 = 1 << 13;
-const DMA_SXCR_PL_1: u32 = 1 << 17;
-const DMA_LISR_FEIF0: u32 = 1 << 0;
-const DMA_LISR_DMEIF0: u32 = 1 << 2;
-const DMA_LISR_TEIF0: u32 = 1 << 3;
-const DMA_LISR_TCIF0: u32 = 1 << 5;
-const DMA_LIFCR_CFEIF0: u32 = 1 << 0;
-const DMA_LIFCR_CDMEIF0: u32 = 1 << 2;
-const DMA_LIFCR_CTEIF0: u32 = 1 << 3;
-const DMA_LIFCR_CHTIF0: u32 = 1 << 4;
-const DMA_LIFCR_CTCIF0: u32 = 1 << 5;
-const ADC_CCR_ADCPRE_0: u32 = 1 << 16;
-const ADC_CCR_ADCPRE: u32 = 0b11 << 16;
-const ADC_CR1_SCAN: u32 = 1 << 8;
-const ADC_CR2_ADON: u32 = 1 << 0;
-const ADC_CR2_CONT: u32 = 1 << 1;
-const ADC_CR2_DMA: u32 = 1 << 8;
-const ADC_CR2_DDS: u32 = 1 << 9;
-const ADC_CR2_EOCS: u32 = 1 << 10;
-const ADC_CR2_SWSTART: u32 = 1 << 30;
-
-const ADC_DMA_CLEAR_FLAGS: u32 =
-    DMA_LIFCR_CFEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CTEIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTCIF0;
-const ADC_DMA_ERROR_FLAGS: u32 = DMA_LISR_FEIF0 | DMA_LISR_DMEIF0 | DMA_LISR_TEIF0;
-const ADC_DMA_CR_BASE: u32 = DMA_SXCR_PL_1 | DMA_SXCR_MSIZE_0 | DMA_SXCR_PSIZE_0 | DMA_SXCR_MINC;
 
 #[derive(Clone, Copy)]
 pub enum GridEvent {
@@ -160,39 +166,71 @@ impl Inputs {
     }
 
     pub fn init_hardware(&mut self) {
-        unsafe {
-            modify_reg(RCC_AHB1ENR, |value| {
-                value | RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_DMA2EN
+        critical_section::with(|_cs| {
+            pac::RCC.ahb1enr().modify(|w| {
+                w.set_gpioaen(true);
+                w.set_dma2en(true);
             });
-            modify_reg(RCC_APB2ENR, |value| value | RCC_APB2ENR_ADC1EN);
+            pac::RCC.apb2enr().modify(|w| w.set_adc1en(true));
+        });
 
-            modify_reg(GPIOA_MODER, |value| value | 0x0000_ffff);
-            modify_reg(GPIOA_PUPDR, |value| value & !0x0000_ffff);
-
-            modify_reg(DMA2_STREAM0_CR, |value| value & !DMA_SXCR_EN);
-            while read_reg(DMA2_STREAM0_CR) & DMA_SXCR_EN != 0 {}
-
-            write_reg(DMA2_LIFCR, ADC_DMA_CLEAR_FLAGS);
-            write_reg(DMA2_STREAM0_PAR, ADC1_DR as u32);
-            write_reg(DMA2_STREAM0_M0AR, self.adc_dma.as_mut_ptr() as u32);
-            write_reg(DMA2_STREAM0_NDTR, LP_ADC_CHANNELS as u32);
-            write_reg(DMA2_STREAM0_FCR, 0);
-            write_reg(DMA2_STREAM0_CR, ADC_DMA_CR_BASE);
-
-            modify_reg(ADC_CCR, |value| {
-                (value & !ADC_CCR_ADCPRE) | ADC_CCR_ADCPRE_0
-            });
-            write_reg(ADC1_CR1, ADC_CR1_SCAN);
-            write_reg(ADC1_CR2, ADC_CR2_DMA | ADC_CR2_DDS | ADC_CR2_EOCS);
-            write_reg(ADC1_SMPR2, 0);
-            write_reg(ADC1_SQR1, 7 << 20);
-            write_reg(ADC1_SQR2, (6 << 0) | (7 << 5));
-            write_reg(
-                ADC1_SQR3,
-                (0 << 0) | (1 << 5) | (2 << 10) | (3 << 15) | (4 << 20) | (5 << 25),
-            );
-            modify_reg(ADC1_CR2, |value| value | ADC_CR2_ADON);
+        for pin in 0..8 {
+            pac::GPIOA
+                .moder()
+                .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::ANALOG));
+            pac::GPIOA
+                .pupdr()
+                .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
         }
+
+        pac::DMA2.st(0).cr().modify(|w| w.set_en(false));
+        while pac::DMA2.st(0).cr().read().en() {}
+
+        clear_dma2_stream0_flags();
+
+        pac::DMA2
+            .st(0)
+            .par()
+            .write_value(pac::ADC1.dr().as_ptr() as u32);
+        pac::DMA2
+            .st(0)
+            .m0ar()
+            .write_value(self.adc_dma.as_mut_ptr() as u32);
+        pac::DMA2
+            .st(0)
+            .ndtr()
+            .write_value(pac::dma::regs::Ndtr(LP_ADC_CHANNELS as u32));
+        pac::DMA2.st(0).fcr().write(|_| {});
+        configure_dma2_stream0_cr();
+
+        pac::ADC1_COMMON
+            .ccr()
+            .modify(|w| w.set_adcpre(pac::adccommon::vals::Adcpre::DIV4));
+        pac::ADC1.cr1().write(|w| w.set_scan(true));
+        pac::ADC1.cr2().write(|w| {
+            w.set_dma(true);
+            w.set_dds(pac::adc::vals::Dds::CONTINUOUS);
+            w.set_eocs(pac::adc::vals::Eocs::EACH_CONVERSION);
+        });
+        pac::ADC1.smpr2().write(|w| {
+            for ch in 0..8 {
+                w.set_smp(ch, pac::adc::vals::SampleTime::CYCLES28);
+            }
+        });
+        pac::ADC1.sqr1().write(|w| w.set_l(7));
+        pac::ADC1.sqr2().write(|w| {
+            w.set_sq(0, 6); // SQ7 = ch6
+            w.set_sq(1, 7); // SQ8 = ch7
+        });
+        pac::ADC1.sqr3().write(|w| {
+            w.set_sq(0, 0); // SQ1 = ch0
+            w.set_sq(1, 1); // SQ2 = ch1
+            w.set_sq(2, 2); // SQ3 = ch2
+            w.set_sq(3, 3); // SQ4 = ch3
+            w.set_sq(4, 4); // SQ5 = ch4
+            w.set_sq(5, 5); // SQ6 = ch5
+        });
+        pac::ADC1.cr2().modify(|w| w.set_adon(true));
     }
 
     pub fn capture_side(&mut self, group: u8, row: u8, sample: u16) {
@@ -219,30 +257,27 @@ impl Inputs {
             return;
         }
 
-        unsafe {
-            if self.pressure_capture_active {
-                modify_reg(DMA2_STREAM0_CR, |value| value & !DMA_SXCR_EN);
-                while read_reg(DMA2_STREAM0_CR) & DMA_SXCR_EN != 0 {}
-            }
-
-            write_reg(DMA2_LIFCR, ADC_DMA_CLEAR_FLAGS);
-            write_reg(DMA2_STREAM0_M0AR, self.adc_dma.as_mut_ptr() as u32);
-            write_reg(DMA2_STREAM0_NDTR, LP_ADC_CHANNELS as u32);
-            write_reg(DMA2_STREAM0_CR, ADC_DMA_CR_BASE);
-            write_reg(ADC1_SR, 0);
-            modify_reg(ADC1_CR2, |value| {
-                (value & !(ADC_CR2_CONT | ADC_CR2_SWSTART))
-                    | ADC_CR2_DMA
-                    | ADC_CR2_DDS
-                    | ADC_CR2_EOCS
-            });
-
-            self.pressure_capture_bank = bank;
-            self.pressure_capture_active = true;
-
-            modify_reg(DMA2_STREAM0_CR, |value| value | DMA_SXCR_EN);
-            modify_reg(ADC1_CR2, |value| value | ADC_CR2_SWSTART);
+        if self.pressure_capture_active {
+            pac::DMA2.st(0).cr().modify(|w| w.set_en(false));
+            while pac::DMA2.st(0).cr().read().en() {}
         }
+
+        clear_dma2_stream0_flags();
+        pac::DMA2
+            .st(0)
+            .m0ar()
+            .write_value(self.adc_dma.as_mut_ptr() as u32);
+        pac::DMA2
+            .st(0)
+            .ndtr()
+            .write_value(pac::dma::regs::Ndtr(LP_ADC_CHANNELS as u32));
+        pac::ADC1.sr().write(|_| {});
+
+        self.pressure_capture_bank = bank;
+        self.pressure_capture_active = true;
+
+        pac::DMA2.st(0).cr().modify(|w| w.set_en(true));
+        pac::ADC1.cr2().modify(|w| w.set_swstart(true));
     }
 
     pub fn finish_pressure_capture(&mut self, bank: u8) -> bool {
@@ -250,24 +285,20 @@ impl Inputs {
             return true;
         }
 
-        unsafe {
-            let lisr = read_reg(DMA2_LISR);
-            if lisr & DMA_LISR_TCIF0 == 0 {
-                if lisr & ADC_DMA_ERROR_FLAGS != 0 {
-                    modify_reg(DMA2_STREAM0_CR, |value| value & !DMA_SXCR_EN);
-                    while read_reg(DMA2_STREAM0_CR) & DMA_SXCR_EN != 0 {}
-                    write_reg(DMA2_LIFCR, ADC_DMA_CLEAR_FLAGS);
-                    self.pressure_capture_bank = 0xff;
-                    self.pressure_capture_active = false;
-                    return true;
-                }
-                return false;
+        let lisr = pac::DMA2.isr(0).read();
+        if !lisr.tcif(0) {
+            if lisr.feif(0) || lisr.dmeif(0) || lisr.teif(0) {
+                pac::DMA2.st(0).cr().modify(|w| w.set_en(false));
+                while pac::DMA2.st(0).cr().read().en() {}
+                clear_dma2_stream0_flags();
+                self.pressure_capture_bank = 0xff;
+                self.pressure_capture_active = false;
+                return true;
             }
-
-            modify_reg(DMA2_STREAM0_CR, |value| value & !DMA_SXCR_EN);
-            while read_reg(DMA2_STREAM0_CR) & DMA_SXCR_EN != 0 {}
-            write_reg(DMA2_LIFCR, ADC_DMA_CLEAR_FLAGS);
+            return false;
         }
+
+        clear_dma2_stream0_flags();
 
         for ch in 0..LP_ADC_CHANNELS {
             self.pressure_raw[bank as usize][ch] = self.adc_dma[ch] & 0x0fff;
@@ -279,10 +310,12 @@ impl Inputs {
         true
     }
 
-    pub fn pop_event(&mut self) -> Option<GridEvent> {
+    pub fn service(&mut self) {
         self.service_pressure_foreground();
         self.service_side_buttons_foreground();
+    }
 
+    pub fn pop_event(&mut self) -> Option<GridEvent> {
         if self.q_tail == self.q_head {
             return None;
         }
@@ -371,9 +404,9 @@ impl Inputs {
         if filt == 0 {
             filt = norm;
         } else if norm >= filt {
-            filt = ((filt as u32 + norm as u32 + 1) / 2) as u16;
+            filt = ((filt as u32 + norm as u32 + 1) >> 1) as u16;
         } else {
-            filt = (((filt as u32) * 7 + norm as u32 + 4) / 8) as u16;
+            filt = (smlabb(filt as u32, 7, norm as u32 + 4) >> 3) as u16;
         }
         self.grid_filt[sensor] = filt;
 
@@ -386,10 +419,10 @@ impl Inputs {
         let mut base = self.grid_base[sensor];
         if filt > base {
             if filt - base < LP_BASELINE_GUARD && !self.grid_pressed[sensor] {
-                base = (((base as u32) * 31 + filt as u32 + 16) / 32) as u16;
+                base = (smlabb(base as u32, 31, filt as u32 + 16) >> 5) as u16;
             }
         } else if !self.grid_pressed[sensor] {
-            base = (((base as u32) * 31 + filt as u32 + 16) / 32) as u16;
+            base = (smlabb(base as u32, 31, filt as u32 + 16) >> 5) as u16;
         }
         self.grid_base[sensor] = base;
 
@@ -486,30 +519,55 @@ fn idx_to_yx(index: u8) -> u8 {
     (9 - (index / 10)) * 10 + (index % 10)
 }
 
+#[inline(always)]
 fn normalize_raw_to_norm(raw: u16) -> u16 {
     if raw < 0x0097 {
         return 0;
     }
 
-    if raw >= 0x0dac {
-        return 0x0fff;
-    }
-
-    ((((raw - 0x0096) as u32) << 12) / 0x0d16) as u16
+    let val = (((raw - 0x0096) as u32) << 12) / 0x0d16;
+    usat12(val)
 }
 
+#[inline(always)]
+fn usat12(val: u32) -> u16 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "usat {0}, #12, {1}",
+            out(reg) res,
+            in(reg) val,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res as u16
+}
+
+#[inline(always)]
+fn usat7(val: u32) -> u8 {
+    let res: u32;
+    unsafe {
+        core::arch::asm!(
+            "usat {0}, #7, {1}",
+            out(reg) res,
+            in(reg) val,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    res as u8
+}
+
+#[inline(always)]
 fn norm_to_velocity(norm: u16) -> u8 {
     if norm <= LP_PRESS_START_NORM {
         return 1;
     }
 
-    let mut value = (((norm - LP_PRESS_START_NORM) as u32) * LP_VELOCITY_GAIN_NUM) / 0x0ed4;
-    if value == 0 {
-        value = 1;
-    }
-    value.min(127) as u8
+    let value = (((norm - LP_PRESS_START_NORM) as u32) * LP_VELOCITY_GAIN_NUM) / 0x0ed4;
+    usat7(value).max(1)
 }
 
+#[inline(always)]
 fn norm_to_aftertouch(norm: u16) -> u8 {
     if norm <= LP_AFTER_START_NORM {
         return 0;
@@ -528,35 +586,47 @@ fn norm_to_aftertouch(norm: u16) -> u8 {
         0
     };
 
-    (out16 >> 9).min(127) as u8
+    usat7(out16 >> 9)
 }
-
-fn median3(mut a: u16, mut b: u16, mut c: u16) -> u16 {
-    if a > b {
-        core::mem::swap(&mut a, &mut b);
-    }
-    if b > c {
-        core::mem::swap(&mut b, &mut c);
-    }
-    if a > b {
-        core::mem::swap(&mut a, &mut b);
-    }
-    b
-}
-
-unsafe fn read_reg(reg: *mut u32) -> u32 {
-    unsafe { ptr::read_volatile(reg) }
-}
-
-unsafe fn write_reg(reg: *mut u32, value: u32) {
+#[inline(always)]
+fn smlabb(x: u32, y: u32, acc: u32) -> u32 {
+    let res: u32;
     unsafe {
-        ptr::write_volatile(reg, value);
+        core::arch::asm!(
+            "smlabb {0}, {1}, {2}, {3}",
+            out(reg) res,
+            in(reg) x,
+            in(reg) y,
+            in(reg) acc,
+            options(nomem, nostack, preserves_flags)
+        );
     }
+    res
 }
 
-unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
-    unsafe {
-        let value = ptr::read_volatile(reg);
-        ptr::write_volatile(reg, f(value));
-    }
+#[inline(always)]
+fn median3(a: u16, b: u16, c: u16) -> u16 {
+    a.max(b.min(c)).min(b.max(c))
+}
+
+fn clear_dma2_stream0_flags() {
+    pac::DMA2.ifcr(0).write(|w| {
+        w.set_feif(0, true);
+        w.set_dmeif(0, true);
+        w.set_teif(0, true);
+        w.set_htif(0, true);
+        w.set_tcif(0, true);
+    });
+}
+
+fn configure_dma2_stream0_cr() {
+    pac::DMA2.st(0).cr().write(|w| {
+        w.set_pl(pac::dma::vals::Pl::HIGH);
+        w.set_chsel(0);
+        w.set_msize(pac::dma::vals::Size::BITS16);
+        w.set_psize(pac::dma::vals::Size::BITS16);
+        w.set_minc(true);
+        w.set_pinc(false);
+        w.set_dir(pac::dma::vals::Dir::PERIPHERAL_TO_MEMORY);
+    });
 }

@@ -1040,7 +1040,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "firmware-core"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "defmt",
 ]
@@ -1216,7 +1216,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "launchpad-mini-mk1"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-mini-mk3"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1244,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-mk2"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-pro"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1278,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-pro-mk3"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-s"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1309,20 +1309,24 @@ dependencies = [
 
 [[package]]
 name = "launchpad-x"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "critical-section",
  "embassy-executor",
  "embassy-futures",
  "embassy-stm32",
  "embassy-sync 0.8.0",
  "embassy-time",
  "embassy-usb",
+ "embedded-storage",
  "firmware-core",
  "heapless 0.9.3",
  "panic-halt",
+ "spi-memory",
  "static_cell",
+ "stm32-metapac",
 ]
 
 [[package]]
@@ -1379,7 +1383,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "mystrix-pro"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "critical-section",
  "embassy-executor",
@@ -1741,6 +1745,16 @@ name = "somni-parser"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0f368519fc6c85fc1afdb769fb5a51123f6158013e143656e25a3485a0d401c"
+
+[[package]]
+name = "spi-memory"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f94caf9e6bd5673e05be1a3f4113b85cdc7976a1ac8bc2763731ae5a4acee4a9"
+dependencies = [
+ "bitflags 1.3.2",
+ "embedded-hal 0.2.7",
+]
 
 [[package]]
 name = "ssmarshal"

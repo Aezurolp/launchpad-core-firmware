@@ -18,38 +18,44 @@ Alternatively, download the `.syx` file from the [releases page](../../releases)
 ## Features
 
 - Performance optimizations for lightshow use
+  - ARM Assembly intrinsics to process inputs and lights in parallel
+  - Asynchronous MIDI processing
+  - Optimized flash storage read/write routines
 - [Roadrunner](https://github.com/anthonyhfm/lppmk3-roadrunner) support on the Launchpad Pro Mk3 (high-speed LED system)
 - Multiple built-in color palettes
-    - Novation palette
-    - Mat1jaczyyy palette
-    - MXOS palette
-    - Launchpad S (legacy) palette
+  - Novation palette
+  - Mat1jaczyyy palette
+  - MXOS palette
+  - Launchpad S (legacy) palette
 - 3 flashable custom palette banks
 - Color palette editor
 - FastLED Apollo Support
 - Performance Mode
-    - Bottom row mirroring on the Launchpad Pro Mk3
+  - Bottom row mirroring on the Launchpad Pro Mk3
 - Programmer Mode
 - Custom boot animation
 
 ## Device Support
+
 Novation Launchpad support:
 
-| Device                | Working | RGB | Custom Palettes | Highspeed LED |
-|-----------------------|:-------:|:---:|:---------------:|:-------------:|
-| Launchpad Pro Mk3     | ✅      | ✅  | ✅              | ✅            |
-| Launchpad X           | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mini Mk3    | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Pro         | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mk2         | ✅      | ✅  | ✅              | ✅            |
-| Launchpad Mini Mk1    | ✅      | ❌  | ❌              | ❌            |
-| Launchpad S           | ✅      | ❌  | ❌              | ❌            |
-----
+| Device             | Working | RGB | Custom Palettes | Highspeed LED |
+| ------------------ | :-----: | :-: | :-------------: | :-----------: |
+| Launchpad Pro Mk3  |   ✅    | ✅  |       ✅        |      ✅       |
+| Launchpad X        |   ✅    | ✅  |       ✅        |      ✅       |
+| Launchpad Mini Mk3 |   ✅    | ✅  |       ✅        |      ✅       |
+| Launchpad Pro      |   ✅    | ✅  |       ✅        |      ✅       |
+| Launchpad Mk2      |   ✅    | ✅  |       ✅        |      ✅       |
+| Launchpad Mini Mk1 |   ✅    | ❌  |       ❌        |      ❌       |
+| Launchpad S        |   ✅    | ❌  |       ❌        |      ❌       |
+
+---
+
 Other devices:
 
 | Device      | Working | RGB | Custom Palettes | Highspeed LED |
-|-------------|:-------:|:---:|:---------------:|:-------------:|
-| Mystrix Pro | ✅     | ✅  | ✅              | ❌            |
+| ----------- | :-----: | :-: | :-------------: | :-----------: |
+| Mystrix Pro |   ✅    | ✅  |       ✅        |      ❌       |
 
 ## Roadmap
 
@@ -72,16 +78,16 @@ cargo <device>
 
 Available `<device>` targets:
 
-| Alias      | Device                  |
-|------------|-------------------------|
-| `lppmk3`   | Launchpad Pro Mk3       |
-| `lpx`      | Launchpad X             |
-| `mini`     | Launchpad Mini Mk3      |
-| `lpp`      | Launchpad Pro           |
-| `mk2`      | Launchpad Mk2           |
-| `minimk1`  | Launchpad Mini Mk1      |
-| `lps`      | Launchpad S             |
-| `mxpro`    | Mystrix Pro (ESP32-S3)  |
+| Alias     | Device                 |
+| --------- | ---------------------- |
+| `lppmk3`  | Launchpad Pro Mk3      |
+| `lpx`     | Launchpad X            |
+| `mini`    | Launchpad Mini Mk3     |
+| `lpp`     | Launchpad Pro          |
+| `mk2`     | Launchpad Mk2          |
+| `minimk1` | Launchpad Mini Mk1     |
+| `lps`     | Launchpad S            |
+| `mxpro`   | Mystrix Pro (ESP32-S3) |
 
 To build all targets at once:
 
@@ -112,11 +118,23 @@ hardware definitions.
 
 ### Flashing the firmware manually
 
+First of all, you need to put your Launchpad into bootloader mode.
+
+- Unplug the Launchpad from USB, if it is connected.
+- Hold the "Capture MIDI" button on the top right corner of the Launchpad.
+- While holding the button, plug the Launchpad back into USB.
+
+You are now in bootloader mode.
+
 You can flash the firmware using our `flash.py` tooling. Here is an example for the Launchpad Pro Mk2
 
 ```shell
 python3 tools/flash.py build/core-launchpad-pro.syx
 ```
+
+You should see a device named something like "Launchpad MIDI Bootloader" appear in your MIDI devices list. Select it and the script will flash the firmware to your Launchpad.
+
+After the flashing is complete, the Launchpad will automatically reboot into normal operating mode with your new firmware.
 
 ## Credits
 
@@ -124,11 +142,13 @@ python3 tools/flash.py build/core-launchpad-pro.syx
 
 [mat1jaczyyy](https://github.com/mat1jaczyyy) - The original lpp-performance-cfw for the Launchpad Pro Mk2
 
+[zeph](https://github.com/ZephyrCodesStuff) - Low-level performance optimizations, improving code soundness and maintainability, refactoring
+
 ## License
 
 CoreFW is licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
 
-Copyright (C) 2025-2026 Anthony Hofmeister.
+Copyright (C) 2025-2026 Anthony Hofmeister and contributors.
 
 This means that if you modify CoreFW and distribute or publish your modified
 version (e.g. as a fork, a public build, or a firmware release), you must:
