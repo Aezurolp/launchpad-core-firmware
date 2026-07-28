@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
+
 use core::cmp::min;
 
 use embassy_stm32::Peri;

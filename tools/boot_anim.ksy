@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Copyright (C) 2026 ZephyrCodesStuff + Gemini 3.6 Flash
+# Copyright (C) 2026 ZephyrCodesStuff
 
 meta:
   id: boot_animation

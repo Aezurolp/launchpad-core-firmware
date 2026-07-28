@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
 const LP_LED_COUNT: usize = 100;
 const LP_LED_BITS: usize = 256;

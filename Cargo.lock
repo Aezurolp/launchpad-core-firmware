@@ -1040,7 +1040,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "firmware-core"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "defmt",
 ]
@@ -1216,7 +1216,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "launchpad-mini-mk1"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-mini-mk3"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1244,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-mk2"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-pro"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1278,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-pro-mk3"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-s"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1309,7 +1309,7 @@ dependencies = [
 
 [[package]]
 name = "launchpad-x"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -1383,7 +1383,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "mystrix-pro"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "critical-section",
  "embassy-executor",

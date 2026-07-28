@@ -26,10 +26,13 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "1.0.1"
+version = "1.1.0"
 publish = false
 license = "GPL-3.0-only"
-authors = ["Anthony Hofmeister"]
+authors = [
+  "Anthony Hofmeister <https://github.com/anthonyhfm>",
+  "zeph <https://github.com/ZephyrCodesStuff>",
+]
 
 [workspace.dependencies]
 defmt = "1.0.1"

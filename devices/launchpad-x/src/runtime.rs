@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
 use crate::extflash::ExtFlash;
 use crate::grid::Grid;
@@ -60,7 +61,6 @@ impl Driver for RuntimeDriver {
     fn write_flash(&mut self, offset: u32, data: &[u8]) {
         let _ = self.flash.write(offset, data);
     }
-
 
     fn device_id(&self) -> u8 {
         3

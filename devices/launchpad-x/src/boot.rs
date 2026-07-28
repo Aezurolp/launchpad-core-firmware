@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
-// Copyright (C) 2026      ZephyrCodesStuff + Gemini 3.6 Flash
+// Copyright (C) 2026 ZephyrCodesStuff
 
 use firmware_core::app::{BootAnimation, BootAnimationApp, BootChange, BootFrame};
 
@@ -35,4 +35,3 @@ static BOOT_ANIMATION: BootAnimation = {
 pub const fn new() -> BootApp {
     BootAnimationApp::new(&BOOT_ANIMATION)
 }
-
