@@ -19,6 +19,7 @@ use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering, compiler_fen
 
 use cortex_m::register::{basepri, basepri_max};
 use embassy_stm32::interrupt::{self, InterruptExt};
+use stm32_metapac as pac;
 
 use crate::grid::Grid;
 
@@ -215,32 +216,6 @@ const DMA_POLL_TICKS: u16 = 5;
 const TIM3_PERIOD_TICKS: u16 = 10;
 const TIM3_PRESCALER: u16 = 59;
 
-const RCC_APB1ENR: *mut u32 = 0x4002_101c as *mut u32;
-const TIM3_CR1: *mut u32 = 0x4000_0400 as *mut u32;
-const TIM3_DIER: *mut u32 = 0x4000_040c as *mut u32;
-const TIM3_SR: *mut u32 = 0x4000_0410 as *mut u32;
-const TIM3_EGR: *mut u32 = 0x4000_0414 as *mut u32;
-const TIM3_CNT: *mut u32 = 0x4000_0424 as *mut u32;
-const TIM3_PSC: *mut u32 = 0x4000_0428 as *mut u32;
-const TIM3_ARR: *mut u32 = 0x4000_042c as *mut u32;
-
-const RCC_APB1ENR_TIM3EN: u32 = 1 << 1;
-const TIM_CR1_CEN: u32 = 1 << 0;
-const TIM_CR1_URS: u32 = 1 << 2;
-const TIM_CR1_DIR: u32 = 1 << 4;
-const TIM_DIER_UIE: u32 = 1 << 0;
-const TIM_SR_UIF: u32 = 1 << 0;
-const TIM_EGR_UG: u32 = 1 << 0;
-
-// DMA1 channel 4 (SPI2_RX) - its transfer-complete IRQ is the reliable
-// "whole full-duplex transfer is done" signal, matching the reference
-// (which also gates on the RX channel rather than the TX channel).
-const DMA1_ISR: *mut u32 = 0x4002_0000 as *mut u32;
-const DMA1_IFCR: *mut u32 = 0x4002_0004 as *mut u32;
-const DMA1_CCR4: *mut u32 = 0x4002_0044 as *mut u32;
-const DMA_CCR_EN: u32 = 1 << 0;
-const DMA1_CH4_ALL_FLAGS: u32 = 0xf << 12;
-
 static GRID: AtomicPtr<Grid> = AtomicPtr::new(ptr::null_mut());
 static SURFACE_MODE: AtomicU8 = AtomicU8::new(0);
 static DMA_FINISHED: AtomicBool = AtomicBool::new(false);
@@ -258,19 +233,22 @@ pub fn start_scan(grid: *mut Grid) {
     SURFACE_MODE.store(0, Ordering::Relaxed);
     DMA_FINISHED.store(false, Ordering::Relaxed);
 
-    unsafe {
-        modify_reg(RCC_APB1ENR, |value| value | RCC_APB1ENR_TIM3EN);
-        modify_reg(TIM3_CR1, |value| value & !TIM_CR1_CEN);
-        modify_reg(TIM3_CR1, |value| {
-            (value & !TIM_CR1_CEN) | TIM_CR1_URS | TIM_CR1_DIR
-        });
-        write_reg(TIM3_PSC, TIM3_PRESCALER as u32);
-        write_reg(TIM3_ARR, TIM3_PERIOD_TICKS as u32);
-        write_reg(TIM3_CNT, TIMER_VALUE[0] as u32);
-        write_reg(TIM3_EGR, TIM_EGR_UG);
-        write_reg(TIM3_SR, 0);
-        modify_reg(TIM3_DIER, |value| value | TIM_DIER_UIE);
-    }
+    pac::RCC.apb1enr().modify(|w| w.set_tim3en(true));
+    pac::TIM3.cr1().modify(|w| {
+        w.set_cen(false);
+        w.set_urs(pac::timer::vals::Urs::COUNTER_ONLY);
+        w.set_dir(pac::timer::vals::Dir::DOWN);
+    });
+    pac::TIM3.psc().write_value(TIM3_PRESCALER);
+    pac::TIM3
+        .arr()
+        .write_value(pac::timer::regs::ArrCore(TIM3_PERIOD_TICKS as u32));
+    pac::TIM3
+        .cnt()
+        .write_value(pac::timer::regs::CntCore(TIMER_VALUE[0] as u32));
+    pac::TIM3.egr().write(|w| w.set_ug(true));
+    pac::TIM3.sr().write(|w| w.set_uif(false));
+    pac::TIM3.dier().modify(|w| w.set_uie(true));
 
     // TIM3 drives the LED scan and must service its update interrupt with as
     // little jitter as possible: any latency at a "bright" phase boundary
@@ -296,19 +274,15 @@ pub fn start_scan(grid: *mut Grid) {
         interrupt::DMA1_CHANNEL4.enable();
     }
 
-    unsafe {
-        modify_reg(TIM3_CR1, |value| value | TIM_CR1_CEN);
-    }
+    pac::TIM3.cr1().modify(|w| w.set_cen(true));
 }
 
 #[cortex_m_rt::interrupt]
 fn TIM3() {
-    if unsafe { read_reg(TIM3_SR) } & TIM_SR_UIF == 0 {
+    if !pac::TIM3.sr().read().uif() {
         return;
     }
-    unsafe {
-        write_reg(TIM3_SR, 0);
-    }
+    pac::TIM3.sr().write(|w| w.set_uif(false));
 
     let grid = GRID.load(Ordering::Acquire);
     if grid.is_null() {
@@ -343,17 +317,17 @@ fn TIM3() {
             }
         };
 
-        unsafe {
-            write_reg(TIM3_CNT, next_delay as u32);
-        }
+        pac::TIM3
+            .cnt()
+            .write_value(pac::timer::regs::CntCore(next_delay as u32));
         SURFACE_MODE.store((mode + 1) & 3, Ordering::Relaxed);
     } else {
         // The bright phase is pending but the previous SPI2/DMA shift-out
         // hasn't completed yet: re-arm a very short poll interval instead of
         // unblanking with stale shift-register contents.
-        unsafe {
-            write_reg(TIM3_CNT, DMA_POLL_TICKS as u32);
-        }
+        pac::TIM3
+            .cnt()
+            .write_value(pac::timer::regs::CntCore(DMA_POLL_TICKS as u32));
     }
 }
 
@@ -363,29 +337,15 @@ fn TIM3() {
 /// data and the incoming switch data.
 #[cortex_m_rt::interrupt]
 fn DMA1_CHANNEL4() {
-    unsafe {
-        modify_reg(DMA1_CCR4, |value| value & !DMA_CCR_EN);
-        write_reg(DMA1_IFCR, DMA1_CH4_ALL_FLAGS);
-        let _ = read_reg(DMA1_ISR);
-    }
+    pac::DMA1.ch(3).cr().modify(|w| w.set_en(false));
+    pac::DMA1.ifcr().write(|w| {
+        w.set_gif(3, true);
+        w.set_tcif(3, true);
+        w.set_htif(3, true);
+        w.set_teif(3, true);
+    });
+    let _ = pac::DMA1.isr().read();
     DMA_FINISHED.store(true, Ordering::Release);
-}
-
-unsafe fn read_reg(reg: *mut u32) -> u32 {
-    unsafe { ptr::read_volatile(reg) }
-}
-
-unsafe fn write_reg(reg: *mut u32, value: u32) {
-    unsafe {
-        ptr::write_volatile(reg, value);
-    }
-}
-
-unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
-    unsafe {
-        let value = ptr::read_volatile(reg);
-        ptr::write_volatile(reg, f(value));
-    }
 }
 
 /// `BASEPRI` threshold that masks preemption priorities `P1`..`P15` while

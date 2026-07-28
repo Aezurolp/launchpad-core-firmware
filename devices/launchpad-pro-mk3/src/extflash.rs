@@ -2,37 +2,53 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 use core::cmp::min;
+use core::convert::Infallible;
 
-use embassy_stm32::Peri;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::peripherals;
 use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::Hertz;
-
-const CMD_WRITE_ENABLE: u8 = 0x06;
-const CMD_READ_STATUS1: u8 = 0x05;
-const CMD_READ_JEDEC_ID: u8 = 0x9f;
-const CMD_PAGE_PROGRAM: u8 = 0x02;
-const CMD_READ_DATA: u8 = 0x03;
-const CMD_SECTOR_ERASE: u8 = 0x20;
-const STATUS_WIP: u8 = 0x01;
-const EXPECTED_JEDEC_MANUFACTURER: u8 = 0xc2;
-const EXPECTED_JEDEC_CAPACITY: u8 = 0x18;
+use embassy_stm32::Peri;
+use embedded_hal::digital::v2::OutputPin;
+use embedded_storage::nor_flash::{
+    check_erase, check_read, check_write, ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash,
+};
+use spi_memory::series25::Flash;
+use spi_memory::{BlockDevice, Read};
 
 const PAGE_SIZE: usize = 256;
 const SECTOR_SIZE: usize = 4096;
 const TOTAL_SIZE: u32 = 16 * 1024 * 1024;
 const SETTINGS_SIZE: u32 = 8 * 1024;
 const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
+const EXPECTED_JEDEC_MANUFACTURER: u8 = 0xc2;
+const EXPECTED_JEDEC_CAPACITY: u8 = 0x18;
 // The MCU runs at 216 MHz. Keep CS high for about 1 us between commands;
 // this comfortably exceeds the flash chip's minimum CS deselect time.
 const CS_DESELECT_DELAY_CYCLES: u32 = 216;
 
+struct FlashCs<'d>(Output<'d>);
+
+impl OutputPin for FlashCs<'_> {
+    type Error = Infallible;
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        self.0.set_low();
+        Ok(())
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        self.0.set_high();
+        cortex_m::asm::delay(CS_DESELECT_DELAY_CYCLES);
+        Ok(())
+    }
+}
+
 pub struct ExtFlash<'d> {
-    spi: Spi<'d, Blocking, Master>,
-    cs: Output<'d>,
+    flash: Option<Flash<Spi<'d, Blocking, Master>, FlashCs<'d>>>,
+    sector_buf: [u8; SECTOR_SIZE],
     jedec_id: [u8; 3],
     present: bool,
 }
@@ -55,23 +71,16 @@ impl<'d> ExtFlash<'d> {
         let mut spi_cfg = SpiConfig::default();
         spi_cfg.frequency = Hertz(10_500_000);
 
-        let cs = Output::new(pa15, Level::High, Speed::VeryHigh);
         let spi = Spi::new_blocking(spi1, pa5, pb5, pb4, spi_cfg);
-        let mut flash = Self {
-            spi,
-            cs,
+        let cs = FlashCs(Output::new(pa15, Level::High, Speed::VeryHigh));
+        let mut this = Self {
+            flash: Flash::init(spi, cs).ok(),
+            sector_buf: [0xff; SECTOR_SIZE],
             jedec_id: [0; 3],
             present: false,
         };
-        flash.probe();
-        flash
-    }
-
-    pub fn settings_size(&mut self) -> u32 {
-        if !self.present {
-            self.probe();
-        }
-        if self.present { SETTINGS_SIZE } else { 0 }
+        this.probe();
+        this
     }
 
     pub fn info(&mut self) -> ExtFlashInfo {
@@ -79,48 +88,73 @@ impl<'d> ExtFlash<'d> {
         ExtFlashInfo {
             present: self.present,
             jedec_id: self.jedec_id,
-            status1: self.read_status1(),
+            status1: self.status1(),
         }
     }
 
-    pub fn read_settings(&mut self, offset: u32, data: &mut [u8]) {
-        if data.is_empty() {
+    fn probe(&mut self) {
+        let Some(flash) = self.flash.as_mut() else {
+            self.jedec_id = [0; 3];
+            self.present = false;
             return;
-        }
+        };
 
-        if !self.present {
-            self.probe();
-        }
-
-        if !self.present || offset >= SETTINGS_SIZE {
-            data.fill(0xff);
+        let Ok(id) = flash.read_jedec_id() else {
+            self.jedec_id = [0; 3];
+            self.present = false;
             return;
-        }
-
-        let readable = min((SETTINGS_SIZE - offset) as usize, data.len());
-        self.read(SETTINGS_OFFSET + offset, &mut data[..readable]);
-
-        if readable < data.len() {
-            data[readable..].fill(0xff);
-        }
+        };
+        let device_id = id.device_id();
+        self.jedec_id = [id.mfr_code(), device_id[0], device_id[1]];
+        self.present = self.jedec_id[0] == EXPECTED_JEDEC_MANUFACTURER
+            && self.jedec_id[2] == EXPECTED_JEDEC_CAPACITY;
     }
 
-    pub fn write_settings(&mut self, offset: u32, data: &[u8]) {
-        if data.is_empty() || offset >= SETTINGS_SIZE {
-            return;
-        }
+    fn status1(&mut self) -> u8 {
+        self.flash
+            .as_mut()
+            .and_then(|flash| flash.read_status().ok())
+            .map(|status| status.bits())
+            .unwrap_or(0xff)
+    }
+}
 
-        if !self.present {
-            self.probe();
+impl ErrorType for ExtFlash<'_> {
+    type Error = NorFlashErrorKind;
+}
+
+impl ReadNorFlash for ExtFlash<'_> {
+    const READ_SIZE: usize = 1;
+
+    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        check_read(self, offset, bytes.len())?;
+        let flash = self.flash.as_mut().ok_or(NorFlashErrorKind::Other)?;
+        flash
+            .read(SETTINGS_OFFSET + offset, bytes)
+            .map_err(|_| NorFlashErrorKind::Other)
+    }
+
+    fn capacity(&self) -> usize {
+        if self.present {
+            SETTINGS_SIZE as usize
+        } else {
+            0
         }
-        if !self.present {
-            return;
-        }
+    }
+}
+
+impl NorFlash for ExtFlash<'_> {
+    const WRITE_SIZE: usize = 1;
+    const ERASE_SIZE: usize = SECTOR_SIZE;
+
+    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        check_write(self, offset, bytes.len())?;
 
         let mut rel_off = offset;
-        let mut src = data;
+        let mut src = bytes;
         let mut writable = min((SETTINGS_SIZE - offset) as usize, src.len());
-        let mut sector_buf = [0xff; SECTOR_SIZE];
+        let (flash, sector_buf) = (&mut self.flash, &mut self.sector_buf);
+        let flash = flash.as_mut().ok_or(NorFlashErrorKind::Other)?;
 
         while writable != 0 {
             let abs_off = SETTINGS_OFFSET + rel_off;
@@ -128,21 +162,27 @@ impl<'d> ExtFlash<'d> {
             let in_sector = (abs_off - sector_base) as usize;
             let chunk = min(writable, SECTOR_SIZE - in_sector);
 
-            self.read(sector_base, &mut sector_buf);
+            flash
+                .read(sector_base, sector_buf)
+                .map_err(|_| NorFlashErrorKind::Other)?;
 
             if sector_buf[in_sector..in_sector + chunk] != src[..chunk] {
                 sector_buf[in_sector..in_sector + chunk].copy_from_slice(&src[..chunk]);
-                self.erase_sector(sector_base);
+                flash
+                    .erase_sectors(sector_base, 1)
+                    .map_err(|_| NorFlashErrorKind::Other)?;
 
                 for page_off in (0..SECTOR_SIZE).step_by(PAGE_SIZE) {
                     if !sector_buf[page_off..page_off + PAGE_SIZE]
                         .iter()
                         .all(|byte| *byte == 0xff)
                     {
-                        let page = sector_buf[page_off..page_off + PAGE_SIZE]
-                            .try_into()
-                            .unwrap();
-                        self.write_page(sector_base + page_off as u32, page);
+                        flash
+                            .write_bytes(
+                                sector_base + page_off as u32,
+                                &mut sector_buf[page_off..page_off + PAGE_SIZE],
+                            )
+                            .map_err(|_| NorFlashErrorKind::Other)?;
                     }
                 }
             }
@@ -151,106 +191,20 @@ impl<'d> ExtFlash<'d> {
             src = &src[chunk..];
             writable -= chunk;
         }
+
+        Ok(())
     }
 
-    fn select(&mut self) {
-        self.cs.set_low();
-    }
+    fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        check_erase(self, from, to)?;
+        let flash = self.flash.as_mut().ok_or(NorFlashErrorKind::Other)?;
 
-    fn deselect(&mut self) {
-        self.cs.set_high();
-        cortex_m::asm::delay(CS_DESELECT_DELAY_CYCLES);
-    }
-
-    fn xfer(&mut self, byte: u8) -> u8 {
-        let mut data = [byte];
-        self.spi.blocking_transfer_in_place(&mut data).unwrap();
-        data[0]
-    }
-
-    fn wait_busy(&mut self) {
-        for _ in 0..100_000 {
-            self.select();
-            self.xfer(CMD_READ_STATUS1);
-            let status = self.xfer(0xff);
-            self.deselect();
-
-            if status & STATUS_WIP == 0 {
-                return;
-            }
+        for sector_addr in (from..to).step_by(SECTOR_SIZE) {
+            flash
+                .erase_sectors(SETTINGS_OFFSET + sector_addr, 1)
+                .map_err(|_| NorFlashErrorKind::Other)?;
         }
-    }
 
-    fn write_enable(&mut self) {
-        self.select();
-        self.xfer(CMD_WRITE_ENABLE);
-        self.deselect();
-    }
-
-    fn probe(&mut self) {
-        self.jedec_id = self.read_jedec_id();
-        self.present = self.jedec_id[0] == EXPECTED_JEDEC_MANUFACTURER
-            && self.jedec_id[2] == EXPECTED_JEDEC_CAPACITY;
-    }
-
-    fn read_jedec_id(&mut self) -> [u8; 3] {
-        self.select();
-        self.xfer(CMD_READ_JEDEC_ID);
-        let id = [self.xfer(0), self.xfer(0), self.xfer(0)];
-        self.deselect();
-        id
-    }
-
-    fn read_status1(&mut self) -> u8 {
-        self.select();
-        self.xfer(CMD_READ_STATUS1);
-        let status = self.xfer(0);
-        self.deselect();
-        status
-    }
-
-    fn erase_sector(&mut self, offset: u32) {
-        self.wait_busy();
-        self.write_enable();
-
-        self.select();
-        self.xfer(CMD_SECTOR_ERASE);
-        self.write_addr(offset);
-        self.deselect();
-
-        self.wait_busy();
-    }
-
-    fn write_page(&mut self, offset: u32, data: &[u8; PAGE_SIZE]) {
-        self.wait_busy();
-        self.write_enable();
-
-        self.select();
-        self.xfer(CMD_PAGE_PROGRAM);
-        self.write_addr(offset);
-        for byte in data {
-            self.xfer(*byte);
-        }
-        self.deselect();
-
-        self.wait_busy();
-    }
-
-    fn read(&mut self, offset: u32, data: &mut [u8]) {
-        self.wait_busy();
-
-        self.select();
-        self.xfer(CMD_READ_DATA);
-        self.write_addr(offset);
-        for byte in data {
-            *byte = self.xfer(0xff);
-        }
-        self.deselect();
-    }
-
-    fn write_addr(&mut self, offset: u32) {
-        self.xfer((offset >> 16) as u8);
-        self.xfer((offset >> 8) as u8);
-        self.xfer(offset as u8);
+        Ok(())
     }
 }

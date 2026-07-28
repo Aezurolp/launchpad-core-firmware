@@ -15,8 +15,10 @@ pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
+use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
 use embassy_stm32::interrupt::InterruptExt;
 use embassy_stm32::rcc::*;
+use embassy_stm32::{Peri, peripherals};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Ticker};
@@ -25,6 +27,7 @@ use firmware_core::driver;
 use firmware_core::sys::settings;
 use panic_halt as _;
 use static_cell::StaticCell;
+use stm32_metapac as pac;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_6400;
 
@@ -58,7 +61,7 @@ async fn main(_spawner: Spawner) {
     config.rcc.apb1_pre = APBPrescaler::DIV2;
     config.rcc.apb2_pre = APBPrescaler::DIV1;
 
-    let _p = embassy_stm32::init(config);
+    let p = embassy_stm32::init(config);
 
     // embassy leaves its TIM4 time-driver interrupt at the reset-default
     // preemption priority (P0). Our BASEPRI critical section (see
@@ -68,7 +71,7 @@ async fn main(_spawner: Spawner) {
     // timer alarm can fire concurrently with a critical section.
     embassy_stm32::interrupt::TIM4.set_priority(embassy_stm32::interrupt::Priority::P1);
 
-    init_usb_board();
+    init_usb_board(p.PA10, p.PA11, p.PA12);
 
     usb::init_event_queues();
     usb::init();
@@ -141,38 +144,30 @@ async fn main(_spawner: Spawner) {
     }
 }
 
-fn init_usb_board() {
-    const RCC_APB2ENR: *mut u32 = 0x4002_1018 as *mut u32;
-    const GPIOA_CRH: *mut u32 = 0x4001_0804 as *mut u32;
-    const GPIOA_BSRR: *mut u32 = 0x4001_0810 as *mut u32;
-    const GPIOA_BRR: *mut u32 = 0x4001_0814 as *mut u32;
-    const GPIOD_CRL: *mut u32 = 0x4001_1400 as *mut u32;
-    const GPIOD_BSRR: *mut u32 = 0x4001_1410 as *mut u32;
-    const IOPAEN: u32 = 1 << 2;
-    const IOPDEN: u32 = 1 << 5;
-    const PA10_PA12_MODE_MASK: u32 = 0xfff << 8;
-    const PA10_OUTPUT_PA11_PA12_FLOATING: u32 = (0x2 << 8) | (0x4 << 12) | (0x4 << 16);
-    const PD4_MODE_MASK: u32 = 0xf << 16;
-    const PD4_OUTPUT_2MHZ: u32 = 0x2 << 16;
+fn init_usb_board(
+    pa10: Peri<'static, peripherals::PA10>,
+    pa11: Peri<'static, peripherals::PA11>,
+    pa12: Peri<'static, peripherals::PA12>,
+) {
+    // The USB peripheral itself is still managed by the existing PMA driver,
+    // but its board-level reset and pin setup use Embassy's GPIO HAL.
+    let mut usb_reset = Output::new(pa10, Level::Low, Speed::Low);
+    let usb_dm = Input::new(pa11, Pull::None);
+    let usb_dp = Input::new(pa12, Pull::None);
+    cortex_m::asm::delay(720_000);
+    usb_reset.set_high();
 
-    unsafe {
-        core::ptr::write_volatile(
-            RCC_APB2ENR,
-            core::ptr::read_volatile(RCC_APB2ENR) | IOPAEN | IOPDEN,
-        );
-        core::ptr::write_volatile(
-            GPIOA_CRH,
-            (core::ptr::read_volatile(GPIOA_CRH) & !PA10_PA12_MODE_MASK)
-                | PA10_OUTPUT_PA11_PA12_FLOATING,
-        );
-        core::ptr::write_volatile(GPIOA_BRR, 1 << 10);
-        cortex_m::asm::delay(720_000);
-        core::ptr::write_volatile(GPIOA_BSRR, 1 << 10);
+    // Dropping Embassy GPIO drivers returns their pins to a floating state.
+    // Keep ownership for the lifetime of the firmware instead.
+    core::mem::forget((usb_reset, usb_dm, usb_dp));
 
-        core::ptr::write_volatile(
-            GPIOD_CRL,
-            (core::ptr::read_volatile(GPIOD_CRL) & !PD4_MODE_MASK) | PD4_OUTPUT_2MHZ,
-        );
-        core::ptr::write_volatile(GPIOD_BSRR, 1 << 4);
-    }
+    // The selected STM32F103RB package has no Embassy pin token for PD4,
+    // though this board's legacy setup drives its GPIO register. Keep this
+    // one package-specific exception typed at the PAC level rather than
+    // inventing an unsafe peripheral token.
+    pac::RCC.apb2enr().modify(|w| w.set_gpioden(true));
+    pac::GPIOD.cr(0).modify(|w| {
+        w.0 = (w.0 & !(0xf << 16)) | (0x2 << 16);
+    });
+    pac::GPIOD.bsrr().write_value(pac::gpio::regs::Bsrr(1 << 4));
 }

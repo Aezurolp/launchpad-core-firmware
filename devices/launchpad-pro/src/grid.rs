@@ -19,10 +19,9 @@
 //! CPU, and `leds.rs` gates unblanking on the transfer's completion
 //! (`DMAFinished`) rather than assuming a fixed duration.
 
-use core::ptr;
-
 use crate::inputs::{GridEvent, Inputs};
 use crate::leds::{self, Leds};
+use stm32_metapac as pac;
 
 const GROUP_COUNT: usize = 4;
 const SHIFT_BYTES_PER_SCAN: usize = 10;
@@ -30,60 +29,8 @@ const BRIGHT_BIT_ORDER: [usize; 6] = [0, 5, 1, 4, 2, 3];
 
 const RAW_INDICES: [usize; GROUP_COUNT] = [0, 9, 17, 25];
 
-const RCC_AHBENR: *mut u32 = 0x4002_1014 as *mut u32;
-const RCC_APB2ENR: *mut u32 = 0x4002_1018 as *mut u32;
-const RCC_APB1ENR: *mut u32 = 0x4002_101c as *mut u32;
-const GPIOA_CRL: *mut u32 = 0x4001_0800 as *mut u32;
-const GPIOB_CRL: *mut u32 = 0x4001_0c00 as *mut u32;
-const GPIOB_CRH: *mut u32 = 0x4001_0c04 as *mut u32;
-const GPIOB_IDR: *mut u32 = 0x4001_0c08 as *mut u32;
-const GPIOC_CRL: *mut u32 = 0x4001_1000 as *mut u32;
-const GPIOC_CRH: *mut u32 = 0x4001_1004 as *mut u32;
-const GPIOD_CRL: *mut u32 = 0x4001_1400 as *mut u32;
-const GPIOB_BSRR: *mut u32 = 0x4001_0c10 as *mut u32;
-const GPIOB_BRR: *mut u32 = 0x4001_0c14 as *mut u32;
-const GPIOC_BSRR: *mut u32 = 0x4001_1010 as *mut u32;
-const GPIOC_BRR: *mut u32 = 0x4001_1014 as *mut u32;
-const GPIOD_BSRR: *mut u32 = 0x4001_1410 as *mut u32;
-const SPI2_CR1: *mut u32 = 0x4000_3800 as *mut u32;
-const SPI2_CR2: *mut u32 = 0x4000_3804 as *mut u32;
-const SPI2_DR: *mut u32 = 0x4000_380c as *mut u32;
-const ADC1_SR: *mut u32 = 0x4001_2400 as *mut u32;
-const ADC1_CR1: *mut u32 = 0x4001_2404 as *mut u32;
-const ADC1_CR2: *mut u32 = 0x4001_2408 as *mut u32;
-const ADC1_SMPR1: *mut u32 = 0x4001_240c as *mut u32;
-const ADC1_SMPR2: *mut u32 = 0x4001_2410 as *mut u32;
-const ADC1_SQR1: *mut u32 = 0x4001_242c as *mut u32;
-const ADC1_SQR2: *mut u32 = 0x4001_2430 as *mut u32;
-const ADC1_SQR3: *mut u32 = 0x4001_2434 as *mut u32;
-const ADC1_DR: *mut u32 = 0x4001_244c as *mut u32;
-
-const DMA1_IFCR: *mut u32 = 0x4002_0004 as *mut u32;
-const DMA1_CCR1: *mut u32 = 0x4002_0008 as *mut u32;
-const DMA1_CNDTR1: *mut u32 = 0x4002_000c as *mut u32;
-const DMA1_CPAR1: *mut u32 = 0x4002_0010 as *mut u32;
-const DMA1_CMAR1: *mut u32 = 0x4002_0014 as *mut u32;
-
-// DMA1 Channel 4 = SPI2_RX, Channel 5 = SPI2_TX (fixed STM32F103 mapping).
-const DMA1_CCR4: *mut u32 = 0x4002_0044 as *mut u32;
-const DMA1_CNDTR4: *mut u32 = 0x4002_0048 as *mut u32;
-const DMA1_CPAR4: *mut u32 = 0x4002_004c as *mut u32;
-const DMA1_CMAR4: *mut u32 = 0x4002_0050 as *mut u32;
-const DMA1_CCR5: *mut u32 = 0x4002_0058 as *mut u32;
-const DMA1_CNDTR5: *mut u32 = 0x4002_005c as *mut u32;
-const DMA1_CPAR5: *mut u32 = 0x4002_0060 as *mut u32;
-const DMA1_CMAR5: *mut u32 = 0x4002_0064 as *mut u32;
 const DMA1_CH4_ALL_FLAGS: u32 = 0xf << 12;
 const DMA1_CH5_ALL_FLAGS: u32 = 0xf << 16;
-
-const AFIOEN: u32 = 1 << 0;
-const IOPAEN: u32 = 1 << 2;
-const IOPBEN: u32 = 1 << 3;
-const IOPCEN: u32 = 1 << 4;
-const IOPDEN: u32 = 1 << 5;
-const ADC1EN: u32 = 1 << 9;
-const SPI2EN: u32 = 1 << 14;
-const DMA1EN: u32 = 1 << 0;
 
 const SPI_CR1_MSTR: u32 = 1 << 2;
 const SPI_CR1_CPOL: u32 = 1 << 1;
@@ -106,7 +53,6 @@ const ADC_CR2_EXTTRIG: u32 = 1 << 20;
 const ADC_CR2_SWSTART: u32 = 1 << 22;
 const ADC_CR2_EXTSEL_SWSTART: u32 = 0b111 << 17;
 const ADC_CR2_DMA: u32 = 1 << 8;
-const DMA_CCR_EN: u32 = 1 << 0;
 const DMA_CCR_TCIE: u32 = 1 << 1;
 const DMA_CCR_DIR: u32 = 1 << 4;
 const DMA_CCR_MINC: u32 = 1 << 7;
@@ -222,32 +168,54 @@ impl Grid {
     /// registers for both the TX (LED data out, Channel 5) and RX (switch
     /// data in, Channel 4) sides, without starting the transfer yet.
     pub fn null_surface_phase(&mut self) {
-        unsafe {
-            modify_reg(DMA1_CCR4, |v| v & !DMA_CCR_EN);
-            modify_reg(DMA1_CCR5, |v| v & !DMA_CCR_EN);
-            write_reg(DMA1_IFCR, DMA1_CH4_ALL_FLAGS | DMA1_CH5_ALL_FLAGS);
+        pac::DMA1.ch(3).cr().modify(|w| w.set_en(false));
+        pac::DMA1.ch(4).cr().modify(|w| w.set_en(false));
+        pac::DMA1.ifcr().write_value(pac::bdma::regs::Isr(
+            DMA1_CH4_ALL_FLAGS | DMA1_CH5_ALL_FLAGS,
+        ));
 
-            write_reg(DMA1_CPAR4, SPI2_DR as u32);
-            write_reg(DMA1_CMAR4, self.shift_rx.as_ptr() as u32);
-            write_reg(DMA1_CNDTR4, SHIFT_BYTES_PER_SCAN as u32);
-            write_reg(DMA1_CCR4, DMA_CCR_MINC | DMA_CCR_TCIE);
+        pac::DMA1
+            .ch(3)
+            .par()
+            .write_value(pac::SPI2.dr().as_ptr() as u32);
+        pac::DMA1
+            .ch(3)
+            .mar()
+            .write_value(self.shift_rx.as_ptr() as u32);
+        pac::DMA1
+            .ch(3)
+            .ndtr()
+            .write_value(pac::bdma::regs::Ndtr(SHIFT_BYTES_PER_SCAN as u32));
+        pac::DMA1
+            .ch(3)
+            .cr()
+            .write_value(pac::bdma::regs::Cr(DMA_CCR_MINC | DMA_CCR_TCIE));
 
-            write_reg(DMA1_CPAR5, SPI2_DR as u32);
-            write_reg(DMA1_CMAR5, self.shift_tx.as_ptr() as u32);
-            write_reg(DMA1_CNDTR5, SHIFT_BYTES_PER_SCAN as u32);
-            write_reg(DMA1_CCR5, DMA_CCR_MINC | DMA_CCR_DIR);
-        }
+        pac::DMA1
+            .ch(4)
+            .par()
+            .write_value(pac::SPI2.dr().as_ptr() as u32);
+        pac::DMA1
+            .ch(4)
+            .mar()
+            .write_value(self.shift_tx.as_ptr() as u32);
+        pac::DMA1
+            .ch(4)
+            .ndtr()
+            .write_value(pac::bdma::regs::Ndtr(SHIFT_BYTES_PER_SCAN as u32));
+        pac::DMA1
+            .ch(4)
+            .cr()
+            .write_value(pac::bdma::regs::Cr(DMA_CCR_MINC | DMA_CCR_DIR));
     }
 
     /// SurfaceMode 2 (LEDSHIFT): start the SPI2 full-duplex DMA transfer.
     /// Non-blocking - completion is signalled asynchronously via the
     /// DMA1 Channel 4 (RX) interrupt, which sets `DMAFinished` in `leds.rs`.
     pub fn ledshift_phase(&mut self) {
-        unsafe {
-            // Enable RX before TX so the first incoming byte is never missed.
-            modify_reg(DMA1_CCR4, |v| v | DMA_CCR_EN);
-            modify_reg(DMA1_CCR5, |v| v | DMA_CCR_EN);
-        }
+        // Enable RX before TX so the first incoming byte is never missed.
+        pac::DMA1.ch(3).cr().modify(|w| w.set_en(true));
+        pac::DMA1.ch(4).cr().modify(|w| w.set_en(true));
     }
 
     /// SurfaceMode 3 (BRIGHT): only called once the previous shift's DMA
@@ -341,19 +309,25 @@ impl Grid {
     }
 
     pub fn start_adc_scan(&mut self) {
-        unsafe {
-            modify_reg(DMA1_CCR1, |val| val & !DMA_CCR_EN);
-            write_reg(DMA1_CMAR1, self.adc_buffer.as_ptr() as u32);
-            write_reg(DMA1_CNDTR1, 16);
-            write_reg(DMA1_IFCR, DMA_IFCR_CTCIF1);
-            modify_reg(DMA1_CCR1, |val| val | DMA_CCR_EN);
-        }
+        pac::DMA1.ch(0).cr().modify(|w| w.set_en(false));
+        pac::DMA1
+            .ch(0)
+            .mar()
+            .write_value(self.adc_buffer.as_ptr() as u32);
+        pac::DMA1
+            .ch(0)
+            .ndtr()
+            .write_value(pac::bdma::regs::Ndtr(16));
+        pac::DMA1
+            .ifcr()
+            .write_value(pac::bdma::regs::Isr(DMA_IFCR_CTCIF1));
+        pac::DMA1.ch(0).cr().modify(|w| w.set_en(true));
 
         start_adc_conversion();
     }
 
     pub fn collect_adc_scan(&mut self) {
-        unsafe { while read_reg(DMA1_CNDTR1) != 0 {} }
+        while pac::DMA1.ch(0).ndtr().read().ndt() != 0 {}
 
         self.inputs
             .capture_adc_bank(self.adc_bank as usize, &self.adc_buffer);
@@ -386,176 +360,190 @@ impl Grid {
     }
 
     fn set_adc_bank_lines(&self, bank: u8) {
-        unsafe {
-            match bank & 3 {
-                0 => write_reg(GPIOC_BRR, (1 << 8) | (1 << 9)),
-                1 => {
-                    write_reg(GPIOC_BSRR, 1 << 9);
-                    write_reg(GPIOC_BRR, 1 << 8);
-                }
-                2 => {
-                    write_reg(GPIOC_BRR, 1 << 9);
-                    write_reg(GPIOC_BSRR, 1 << 8);
-                }
-                _ => write_reg(GPIOC_BSRR, (1 << 8) | (1 << 9)),
+        match bank & 3 {
+            0 => pac::GPIOC
+                .brr()
+                .write_value(pac::gpio::regs::Brr((1 << 8) | (1 << 9))),
+            1 => {
+                pac::GPIOC.bsrr().write_value(pac::gpio::regs::Bsrr(1 << 9));
+                pac::GPIOC.brr().write_value(pac::gpio::regs::Brr(1 << 8));
             }
+            2 => {
+                pac::GPIOC.brr().write_value(pac::gpio::regs::Brr(1 << 9));
+                pac::GPIOC.bsrr().write_value(pac::gpio::regs::Bsrr(1 << 8));
+            }
+            _ => pac::GPIOC
+                .bsrr()
+                .write_value(pac::gpio::regs::Bsrr((1 << 8) | (1 << 9))),
         }
     }
 
     fn blank_assert(&self) {
-        unsafe {
-            write_reg(GPIOB_BSRR, 1 << 12);
-            write_reg(GPIOB_BRR, 1 << 8);
-        }
+        pac::GPIOB
+            .bsrr()
+            .write_value(pac::gpio::regs::Bsrr(1 << 12));
+        pac::GPIOB.brr().write_value(pac::gpio::regs::Brr(1 << 8));
     }
 
     fn blank_release(&self) {
-        unsafe {
-            write_reg(GPIOB_BRR, 1 << 12);
-            write_reg(GPIOB_BSRR, 1 << 8);
-        }
+        pac::GPIOB.brr().write_value(pac::gpio::regs::Brr(1 << 12));
+        pac::GPIOB.bsrr().write_value(pac::gpio::regs::Bsrr(1 << 8));
     }
 
     fn deselect_all_groups(&self) {
-        unsafe {
-            write_reg(GPIOC_BSRR, (1 << 10) | (1 << 11) | (1 << 12));
-            write_reg(GPIOD_BSRR, 1 << 2);
-        }
+        pac::GPIOC
+            .bsrr()
+            .write_value(pac::gpio::regs::Bsrr((1 << 10) | (1 << 11) | (1 << 12)));
+        pac::GPIOD.bsrr().write_value(pac::gpio::regs::Bsrr(1 << 2));
     }
 
     fn select_group(&self, group: u8) {
-        unsafe {
-            match group {
-                0 => write_reg(GPIOC_BSRR, 1 << (10 + 16)),
-                1 => write_reg(GPIOC_BSRR, 1 << (11 + 16)),
-                2 => write_reg(GPIOC_BSRR, 1 << (12 + 16)),
-                _ => write_reg(GPIOD_BSRR, 1 << (2 + 16)),
-            }
+        match group {
+            0 => pac::GPIOC
+                .bsrr()
+                .write_value(pac::gpio::regs::Bsrr(1 << (10 + 16))),
+            1 => pac::GPIOC
+                .bsrr()
+                .write_value(pac::gpio::regs::Bsrr(1 << (11 + 16))),
+            2 => pac::GPIOC
+                .bsrr()
+                .write_value(pac::gpio::regs::Bsrr(1 << (12 + 16))),
+            _ => pac::GPIOD
+                .bsrr()
+                .write_value(pac::gpio::regs::Bsrr(1 << (2 + 16))),
         }
     }
 }
 
 fn read_vbus_raw() -> bool {
-    unsafe { read_reg(GPIOB_IDR) & VBUS_PIN_MASK != 0 }
+    pac::GPIOB.idr().read().0 & VBUS_PIN_MASK != 0
 }
 
 fn init_surface_hardware() {
-    unsafe {
-        modify_reg(RCC_APB2ENR, |value| {
-            value | AFIOEN | IOPAEN | IOPBEN | IOPCEN | IOPDEN
-        });
-        modify_reg(RCC_APB1ENR, |value| value | SPI2EN);
+    pac::RCC.apb2enr().modify(|w| {
+        w.set_afioen(true);
+        w.set_gpioaen(true);
+        w.set_gpioben(true);
+        w.set_gpiocen(true);
+        w.set_gpioden(true);
+    });
+    pac::RCC.apb1enr().modify(|w| w.set_spi2en(true));
 
-        write_reg(GPIOA_CRL, 0);
+    pac::GPIOA.cr(0).write_value(pac::gpio::regs::Cr(0));
 
-        let gpiob_crl = read_reg(GPIOB_CRL);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 0, 0b0000);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 1, 0b0000);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 3, 0b0100);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 4, 0b0100);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 5, 0b0001);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 6, 0b0001);
-        let gpiob_crl = set_pin_mode(gpiob_crl, 7, 0b0001);
-        write_reg(GPIOB_CRL, gpiob_crl);
+    pac::GPIOB.cr(0).modify(|w| {
+        w.0 = set_pin_mode(w.0, 0, 0b0000);
+        w.0 = set_pin_mode(w.0, 1, 0b0000);
+        w.0 = set_pin_mode(w.0, 3, 0b0100);
+        w.0 = set_pin_mode(w.0, 4, 0b0100);
+        w.0 = set_pin_mode(w.0, 5, 0b0001);
+        w.0 = set_pin_mode(w.0, 6, 0b0001);
+        w.0 = set_pin_mode(w.0, 7, 0b0001);
+    });
+    pac::GPIOB.cr(1).modify(|w| {
+        w.0 = set_pin_mode(w.0, 8, 0b0001);
+        w.0 = set_pin_mode(w.0, 9, 0b0100);
+        w.0 = set_pin_mode(w.0, 10, 0b1001);
+        w.0 = set_pin_mode(w.0, 11, 0b0100);
+        w.0 = set_pin_mode(w.0, 12, 0b0001);
+        w.0 = set_pin_mode(w.0, 13, 0b1001);
+        w.0 = set_pin_mode(w.0, 14, 0b1000);
+        w.0 = set_pin_mode(w.0, 15, 0b1001);
+    });
+    pac::GPIOC.cr(0).modify(|w| {
+        w.0 = set_pin_mode(w.0, 0, 0b0000);
+        w.0 = set_pin_mode(w.0, 1, 0b0000);
+        w.0 = set_pin_mode(w.0, 2, 0b0000);
+        w.0 = set_pin_mode(w.0, 3, 0b0000);
+        w.0 = set_pin_mode(w.0, 4, 0b0000);
+        w.0 = set_pin_mode(w.0, 5, 0b0000);
+        w.0 = set_pin_mode(w.0, 7, 0b0001);
+    });
+    pac::GPIOC.cr(1).modify(|w| {
+        for pin in 8..16 {
+            w.0 = set_pin_mode(w.0, pin, 0b0001);
+        }
+    });
+    pac::GPIOD
+        .cr(0)
+        .modify(|w| w.0 = set_pin_mode(w.0, 2, 0b0001));
 
-        let gpiob_crh = read_reg(GPIOB_CRH);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 8, 0b0001);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 9, 0b0100);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 10, 0b1001);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 11, 0b0100);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 12, 0b0001);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 13, 0b1001);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 14, 0b1000);
-        let gpiob_crh = set_pin_mode(gpiob_crh, 15, 0b1001);
-        write_reg(GPIOB_CRH, gpiob_crh);
+    pac::GPIOB.brr().write_value(pac::gpio::regs::Brr(0xffff));
+    pac::GPIOB
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr((1 << 14) | (1 << 8)));
+    pac::GPIOC
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr((0xffff << 16) | 0x1c80));
+    pac::GPIOD
+        .bsrr()
+        .write_value(pac::gpio::regs::Bsrr((0xffff << 16) | (1 << 2)));
 
-        let gpioc_crl = read_reg(GPIOC_CRL);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 0, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 1, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 2, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 3, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 4, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 5, 0b0000);
-        let gpioc_crl = set_pin_mode(gpioc_crl, 7, 0b0001);
-        write_reg(GPIOC_CRL, gpioc_crl);
-
-        let gpioc_crh = read_reg(GPIOC_CRH);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 8, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 9, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 10, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 11, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 12, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 13, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 14, 0b0001);
-        let gpioc_crh = set_pin_mode(gpioc_crh, 15, 0b0001);
-        write_reg(GPIOC_CRH, gpioc_crh);
-
-        let gpiod_crl = read_reg(GPIOD_CRL);
-        let gpiod_crl = set_pin_mode(gpiod_crl, 2, 0b0001);
-        write_reg(GPIOD_CRL, gpiod_crl);
-
-        write_reg(GPIOB_BRR, 0xffff);
-        write_reg(GPIOB_BSRR, (1 << 14) | (1 << 8));
-        write_reg(GPIOC_BSRR, (0xffff << 16) | 0x1c80);
-        write_reg(GPIOD_BSRR, (0xffff << 16) | (1 << 2));
-
-        write_reg(
-            SPI2_CR1,
-            SPI_CR1_MSTR
-                | SPI_CR1_CPOL
-                | SPI_CR1_CPHA
-                | SPI_CR1_BR_0
-                | SPI_CR1_BR_1
-                | SPI_CR1_LSBFIRST
-                | SPI_CR1_SSM
-                | SPI_CR1_SSI
-                | SPI_CR1_SPE,
-        );
-        // Enable SPI2's DMA request lines once; individual transfers are
-        // gated purely by each DMA channel's own EN bit (see
-        // null_surface_phase/ledshift_phase).
-        write_reg(SPI2_CR2, SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN);
-    }
+    pac::SPI2.cr1().write_value(pac::spi::regs::Cr1(
+        SPI_CR1_MSTR
+            | SPI_CR1_CPOL
+            | SPI_CR1_CPHA
+            | SPI_CR1_BR_0
+            | SPI_CR1_BR_1
+            | SPI_CR1_LSBFIRST
+            | SPI_CR1_SSM
+            | SPI_CR1_SSI
+            | SPI_CR1_SPE,
+    ));
+    // Enable SPI2's DMA request lines once; individual transfers are
+    // gated purely by each DMA channel's own EN bit (see
+    // null_surface_phase/ledshift_phase).
+    pac::SPI2
+        .cr2()
+        .write_value(pac::spi::regs::Cr2(SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN));
 }
 
 fn init_adc_hardware() {
-    unsafe {
-        modify_reg(RCC_AHBENR, |value| value | DMA1EN);
-        modify_reg(RCC_APB2ENR, |value| value | ADC1EN);
+    pac::RCC.ahbenr().modify(|w| w.set_dma1en(true));
+    pac::RCC.apb2enr().modify(|w| w.set_adc1en(true));
 
-        write_reg(ADC1_CR1, ADC_CR1_SCAN);
-        write_reg(ADC1_SMPR1, 0x00ff_ffff);
-        write_reg(ADC1_SMPR2, 0xffff_ffff);
-        write_reg(ADC1_SQR1, 15 << 20);
-        write_reg(ADC1_SQR3, pack_sequence(&ADC_SEQUENCE[0..6]));
-        write_reg(ADC1_SQR2, pack_sequence(&ADC_SEQUENCE[6..12]));
-        write_reg(ADC1_SQR1, (15 << 20) | pack_sequence(&ADC_SEQUENCE[12..16]));
+    pac::ADC1
+        .cr1()
+        .write_value(pac::adc::regs::Cr1(ADC_CR1_SCAN));
+    pac::ADC1
+        .smpr1()
+        .write_value(pac::adc::regs::Smpr1(0x00ff_ffff));
+    pac::ADC1
+        .smpr2()
+        .write_value(pac::adc::regs::Smpr2(0xffff_ffff));
+    pac::ADC1
+        .sqr3()
+        .write_value(pac::adc::regs::Sqr3(pack_sequence(&ADC_SEQUENCE[0..6])));
+    pac::ADC1
+        .sqr2()
+        .write_value(pac::adc::regs::Sqr2(pack_sequence(&ADC_SEQUENCE[6..12])));
+    pac::ADC1.sqr1().write_value(pac::adc::regs::Sqr1(
+        (15 << 20) | pack_sequence(&ADC_SEQUENCE[12..16]),
+    ));
 
-        write_reg(DMA1_CPAR1, ADC1_DR as u32);
-        write_reg(
-            DMA1_CCR1,
-            DMA_CCR_MINC | DMA_CCR_PSIZE_16 | DMA_CCR_MSIZE_16,
-        );
+    pac::DMA1
+        .ch(0)
+        .par()
+        .write_value(pac::ADC1.dr().as_ptr() as u32);
+    pac::DMA1.ch(0).cr().write_value(pac::bdma::regs::Cr(
+        DMA_CCR_MINC | DMA_CCR_PSIZE_16 | DMA_CCR_MSIZE_16,
+    ));
 
-        write_reg(
-            ADC1_CR2,
-            ADC_CR2_ADON | ADC_CR2_EXTTRIG | ADC_CR2_EXTSEL_SWSTART | ADC_CR2_DMA,
-        );
-        modify_reg(ADC1_CR2, |value| value | ADC_CR2_RSTCAL);
-        while read_reg(ADC1_CR2) & ADC_CR2_RSTCAL != 0 {}
-        modify_reg(ADC1_CR2, |value| value | ADC_CR2_CAL);
-        while read_reg(ADC1_CR2) & ADC_CR2_CAL != 0 {}
-    }
+    pac::ADC1.cr2().write_value(pac::adc::regs::Cr2(
+        ADC_CR2_ADON | ADC_CR2_EXTTRIG | ADC_CR2_EXTSEL_SWSTART | ADC_CR2_DMA,
+    ));
+    pac::ADC1.cr2().modify(|w| w.0 |= ADC_CR2_RSTCAL);
+    while pac::ADC1.cr2().read().0 & ADC_CR2_RSTCAL != 0 {}
+    pac::ADC1.cr2().modify(|w| w.0 |= ADC_CR2_CAL);
+    while pac::ADC1.cr2().read().0 & ADC_CR2_CAL != 0 {}
 }
 
 fn start_adc_conversion() {
-    unsafe {
-        modify_reg(ADC1_SR, |value| value & !ADC_SR_EOC);
-        modify_reg(ADC1_CR2, |value| {
-            value | ADC_CR2_ADON | ADC_CR2_EXTTRIG | ADC_CR2_EXTSEL_SWSTART
-        });
-        modify_reg(ADC1_CR2, |value| value | ADC_CR2_SWSTART);
-    }
+    pac::ADC1.sr().modify(|w| w.0 &= !ADC_SR_EOC);
+    pac::ADC1
+        .cr2()
+        .modify(|w| w.0 |= ADC_CR2_ADON | ADC_CR2_EXTTRIG | ADC_CR2_EXTSEL_SWSTART);
+    pac::ADC1.cr2().modify(|w| w.0 |= ADC_CR2_SWSTART);
 }
 
 fn pack_sequence(channels: &[u8]) -> u32 {
@@ -569,21 +557,4 @@ fn pack_sequence(channels: &[u8]) -> u32 {
 fn set_pin_mode(register: u32, pin: u8, mode: u32) -> u32 {
     let shift = ((pin % 8) as u32) * 4;
     (register & !(0xf << shift)) | (mode << shift)
-}
-
-unsafe fn read_reg(reg: *mut u32) -> u32 {
-    unsafe { ptr::read_volatile(reg) }
-}
-
-unsafe fn write_reg(reg: *mut u32, value: u32) {
-    unsafe {
-        ptr::write_volatile(reg, value);
-    }
-}
-
-unsafe fn modify_reg(reg: *mut u32, f: impl FnOnce(u32) -> u32) {
-    let value = unsafe { ptr::read_volatile(reg) };
-    unsafe {
-        ptr::write_volatile(reg, f(value));
-    }
 }

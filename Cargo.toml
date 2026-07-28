@@ -77,5 +77,8 @@ opt-level = 3
 [profile.release.package.launchpad-mini-mk3]
 opt-level = 3
 
+[profile.release.package.launchpad-pro]
+opt-level = 3
+
 [profile.release.package.launchpad-pro-mk3]
 opt-level = 3

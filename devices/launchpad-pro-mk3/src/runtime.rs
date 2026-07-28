@@ -3,15 +3,16 @@
 
 use core::cell::UnsafeCell;
 use embassy_embedded_hal::SetConfig;
-use embassy_stm32::Peri;
 use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
 use embassy_stm32::mode::Blocking;
 use embassy_stm32::peripherals;
 use embassy_stm32::usart::{Config as UartConfig, Uart};
+use embassy_stm32::Peri;
 use embedded_hal_nb::nb;
 use embedded_hal_nb::serial::Read;
 
 use crate::extflash::{ExtFlash, ExtFlashInfo};
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use firmware_core::app::SurfaceEvent;
 use firmware_core::driver::Driver;
 
@@ -358,13 +359,15 @@ impl Driver for RuntimeDriver {
         let _ = crate::usb::enqueue_tx_message(port.as_cable(), data);
     }
     fn flash_size(&mut self) -> u32 {
-        self.flash.settings_size()
+        self.flash.capacity() as u32
     }
     fn read_flash(&mut self, offset: u32, data: &mut [u8]) {
-        self.flash.read_settings(offset, data);
+        if self.flash.read(offset, data).is_err() {
+            data.fill(0xff);
+        }
     }
     fn write_flash(&mut self, offset: u32, data: &[u8]) {
-        self.flash.write_settings(offset, data);
+        let _ = self.flash.write(offset, data);
     }
     fn device_id(&self) -> u8 {
         35
@@ -1265,7 +1268,7 @@ fn reset_pulse(reset: &mut Output<'static>) {
 
 fn raw_uart_apply_rom(baud: u32) {
     use stm32_metapac as pac;
-    use stm32_metapac::usart::vals::{M0, Over8, Ps, Stop};
+    use stm32_metapac::usart::vals::{Over8, Ps, Stop, M0};
 
     let uart = pac::UART5;
 

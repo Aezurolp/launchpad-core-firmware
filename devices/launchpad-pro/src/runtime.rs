@@ -4,6 +4,7 @@
 use crate::flash::Flash;
 use crate::grid::Grid;
 use crate::usb;
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use firmware_core::driver::Driver;
 use firmware_core::sys::midi::MidiPort;
 
@@ -53,15 +54,17 @@ impl Driver for RuntimeDriver {
     }
 
     fn flash_size(&mut self) -> u32 {
-        self.flash.settings_size()
+        self.flash.capacity() as u32
     }
 
     fn read_flash(&mut self, offset: u32, data: &mut [u8]) {
-        self.flash.read_settings(offset, data);
+        if self.flash.read(offset, data).is_err() {
+            data.fill(0xff);
+        }
     }
 
     fn write_flash(&mut self, offset: u32, data: &[u8]) {
-        self.flash.write_settings(offset, data);
+        let _ = self.flash.write(offset, data);
     }
 
     fn device_id(&self) -> u8 {

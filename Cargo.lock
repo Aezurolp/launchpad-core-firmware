@@ -1274,10 +1274,12 @@ dependencies = [
  "embassy-stm32",
  "embassy-sync 0.8.0",
  "embassy-time",
+ "embedded-storage",
  "firmware-core",
  "heapless 0.9.3",
  "panic-halt",
  "static_cell",
+ "stm32-metapac",
 ]
 
 [[package]]
@@ -1293,10 +1295,13 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "embassy-usb",
+ "embedded-hal 0.2.7",
  "embedded-hal-nb",
+ "embedded-storage",
  "firmware-core",
  "heapless 0.9.3",
  "panic-halt",
+ "spi-memory",
  "static_cell",
  "stm32-metapac",
 ]

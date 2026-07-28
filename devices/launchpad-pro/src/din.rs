@@ -9,6 +9,7 @@ use firmware_core::app::MidiEvent;
 use firmware_core::sys::midi::MidiPort;
 use heapless::spsc::{Consumer, Producer, Queue};
 use static_cell::StaticCell;
+use stm32_metapac as pac;
 
 const MIDI_QUEUE_SIZE: usize = 257;
 const MIDI_TX_MAX_LEN: usize = 256;
@@ -55,11 +56,6 @@ static MIDI_TX_PRODUCER: HandleSlot<Producer<'static, MidiTxMessage>> = HandleSl
 static MIDI_TX_CONSUMER: HandleSlot<Consumer<'static, MidiTxMessage>> = HandleSlot::new();
 static MIDI_CABLES: AtomicU8 = AtomicU8::new(0);
 
-const RCC_APB2ENR: *mut u32 = 0x4002_1018 as *mut u32;
-const GPIOA_CRL: *mut u32 = 0x4001_0800 as *mut u32;
-const GPIOA_CRH: *mut u32 = 0x4001_0804 as *mut u32;
-const GPIOA_IDR: *mut u32 = 0x4001_0808 as *mut u32;
-const IOPAEN: u32 = 1 << 2;
 const PA8_MASK: u32 = 0xf << 0;
 const PA9_MASK: u32 = 0xf << 4;
 const INPUT_FLOATING: u32 = 0x4;
@@ -124,7 +120,7 @@ pub fn ingest_rx_byte(parser: &mut MidiParser, byte: u8) {
 }
 
 use embassy_stm32::usart::{self, Config, Uart};
-use embassy_stm32::{bind_interrupts, peripherals, Peri};
+use embassy_stm32::{Peri, bind_interrupts, peripherals};
 
 bind_interrupts!(struct Irqs {
     USART3 => usart::InterruptHandler<peripherals::USART3>;
@@ -142,7 +138,7 @@ pub fn spawn(
 ) {
     let mut config = Config::default();
     config.baudrate = 31250;
-    
+
     let uart = Uart::new(usart, rx, tx, tx_dma, rx_dma, Irqs, config).unwrap();
     let (tx_drv, rx_drv) = uart.split();
 
@@ -151,9 +147,7 @@ pub fn spawn(
 
     spawner.spawn(din_tx_task(tx_drv).expect("din_tx_task spawn"));
     spawner.spawn(din_rx_task(rx_drv).expect("din_rx_task spawn"));
-    spawner.spawn(
-        din_cable_detect_task().expect("din_cable_detect_task token"),
-    );
+    spawner.spawn(din_cable_detect_task().expect("din_cable_detect_task token"));
 }
 
 #[embassy_executor::task]
@@ -268,23 +262,15 @@ fn short_message_len(status: u8) -> Option<usize> {
 }
 
 fn init_cable_detect() {
-    unsafe {
-        core::ptr::write_volatile(
-            RCC_APB2ENR,
-            core::ptr::read_volatile(RCC_APB2ENR) | IOPAEN,
-        );
-
-        let crh = core::ptr::read_volatile(GPIOA_CRH);
-        let crh = (crh & !PA8_MASK) | (INPUT_FLOATING << 0);
-        let crh = (crh & !PA9_MASK) | (INPUT_FLOATING << 4);
-        core::ptr::write_volatile(GPIOA_CRH, crh);
-
-        let _ = GPIOA_CRL;
-    }
+    pac::RCC.apb2enr().modify(|w| w.set_gpioaen(true));
+    pac::GPIOA.cr(1).modify(|w| {
+        w.0 = (w.0 & !PA8_MASK) | (INPUT_FLOATING << 0);
+        w.0 = (w.0 & !PA9_MASK) | (INPUT_FLOATING << 4);
+    });
 }
 
 fn update_cable_state() {
-    let idr = unsafe { core::ptr::read_volatile(GPIOA_IDR) };
+    let idr = pac::GPIOA.idr().read().0;
     let midi_in_connected = (idr & (1 << 9)) == 0;
     let midi_out_connected = (idr & (1 << 8)) == 0;
 
