@@ -29,10 +29,10 @@ static MIDI_QUEUE: StaticCell<Queue<MidiEvent, MIDI_QUEUE_SIZE>> = StaticCell::n
 static SYSEX_QUEUE: StaticCell<Queue<SysexMessage, SYSEX_QUEUE_SIZE>> = StaticCell::new();
 
 const SYSEX_MAX_LEN: usize = 256;
-const MIDI_QUEUE_SIZE: usize = 1025;
-const SYSEX_QUEUE_SIZE: usize = 5;
+const MIDI_QUEUE_SIZE: usize = 1024;
+const SYSEX_QUEUE_SIZE: usize = 4;
 const MIDI_TX_MAX_LEN: usize = 256;
-const MIDI_TX_QUEUE_SIZE: usize = 17;
+const MIDI_TX_QUEUE_SIZE: usize = 16;
 
 pub struct SysexMessage {
     pub port: MidiPort,
@@ -332,11 +332,11 @@ fn enqueue_sysex_message(message: SysexMessage) -> Result<(), SysexMessage> {
 }
 
 async fn flush_tx_queue(write_ep: &mut impl EndpointIn) -> Result<(), Disconnected> {
+    let mut packet_buf = [0u8; 64];
     while let Some(message) = MIDI_TX_CONSUMER
         .with_mut(|consumer| consumer.dequeue())
         .flatten()
     {
-        let mut packet_buf = [0u8; 64];
         let packet_len =
             encode_usb_midi_packets(message.port, &message.data[..message.len], &mut packet_buf);
 

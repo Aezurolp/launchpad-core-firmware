@@ -5,11 +5,8 @@ use crate::buttons::Buttons;
 use crate::leds::Leds;
 use embassy_stm32::Peri;
 use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_stm32::mode::Blocking;
 use embassy_stm32::peripherals;
-use embassy_stm32::spi::mode::Master;
-use embassy_stm32::spi::{Config as SpiConfig, Spi};
-use embassy_stm32::time::Hertz;
+use stm32_metapac as pac;
 
 const SCAN_PHASE_LUT: [u8; 96] = [
     0, 3, 2, 4, 5, 0, 3, 2, 1, 5, 0, 3, 4, 1, 5, 0, 2, 4, 1, 5, 3, 2, 4, 1, 4, 0, 3, 2, 2, 5, 0, 3,
@@ -41,7 +38,6 @@ const BRIGHTNESS_PHASE_LUT: [[u64; 6]; 11] = [
 const ROW_MASK: [u16; 4] = [1 << 0, 1 << 1, 1 << 2, 1 << 10];
 
 pub struct Grid<'d> {
-    spi: Spi<'d, Blocking, Master>,
     pa1: Output<'d>,
     pa4: Output<'d>,
     pa8: Output<'d>,
@@ -72,16 +68,12 @@ impl<'d> Grid<'d> {
         pb10: Peri<'d, peripherals::PB10>,
         pb12: Peri<'d, peripherals::PB12>,
     ) -> Self {
-        let mut spi_cfg = SpiConfig::default();
-        spi_cfg.frequency = Hertz(10_000_000);
-
-        let spi = Spi::new_blocking(spi2, pb13, pb15, pb14, spi_cfg);
+        init_spi2_matrix(spi2, pb13, pb15, pb14);
 
         let leds = Leds::new();
         let buttons = Buttons::new();
 
         Self {
-            spi,
             pa1: Output::new(pa1, Level::Low, Speed::VeryHigh),
             pa4: Output::new(pa4, Level::Low, Speed::VeryHigh),
             pa8: Output::new(pa8, Level::High, Speed::VeryHigh),
@@ -127,7 +119,7 @@ impl<'d> Grid<'d> {
         self.pb2.set_high();
         self.pb10.set_high();
 
-        self.spi.blocking_transfer_in_place(&mut txrx).unwrap();
+        spi2_transfer_8(&mut txrx);
 
         self.buttons.capture_scan(group, capture_row, &txrx);
     }
@@ -208,4 +200,69 @@ impl<'d> Grid<'d> {
         let raw = ((level << 5) + 14) & 0xfe;
         ((11 * raw as u16) >> 8) as usize
     }
+}
+
+// The Mini Mk3 must receive every byte: MISO carries the scanned button matrix.
+// This is deliberately a full-duplex transfer, unlike the Launchpad X LED-only SPI path.
+fn init_spi2_matrix(
+    spi2: Peri<'_, peripherals::SPI2>,
+    pb13: Peri<'_, peripherals::PB13>,
+    pb15: Peri<'_, peripherals::PB15>,
+    pb14: Peri<'_, peripherals::PB14>,
+) {
+    // Consume the Embassy ownership tokens before directly configuring the same hardware.
+    // No other driver owns SPI2 or these pins after Grid::new returns.
+    let _ = (spi2, pb13, pb15, pb14);
+
+    critical_section::with(|_cs| {
+        pac::RCC.ahb1enr().modify(|w| w.set_gpioben(true));
+        pac::RCC.apb1enr().modify(|w| w.set_spi2en(true));
+        pac::RCC.apb1rstr().modify(|w| w.set_spi2rst(true));
+        pac::RCC.apb1rstr().modify(|w| w.set_spi2rst(false));
+    });
+
+    for pin in [13, 14, 15] {
+        pac::GPIOB
+            .moder()
+            .modify(|w| w.set_moder(pin, pac::gpio::vals::Moder::ALTERNATE));
+        pac::GPIOB
+            .ospeedr()
+            .modify(|w| w.set_ospeedr(pin, pac::gpio::vals::Ospeedr::VERY_HIGH_SPEED));
+        pac::GPIOB
+            .pupdr()
+            .modify(|w| w.set_pupdr(pin, pac::gpio::vals::Pupdr::FLOATING));
+        pac::GPIOB.afr(pin / 8).modify(|w| w.set_afr(pin % 8, 5));
+    }
+
+    // Mirrors Embassy's blocking SPI configuration: mode 0, MSB first, 8-bit full duplex.
+    // APB1 runs at 42 MHz, so DIV4 is the closest hardware rate to the previous 10 MHz request.
+    pac::SPI2.cr1().write(|w| {
+        w.set_mstr(pac::spi::vals::Mstr::MASTER);
+        w.set_br(pac::spi::vals::Br::DIV4);
+        w.set_cpha(pac::spi::vals::Cpha::FIRST_EDGE);
+        w.set_cpol(pac::spi::vals::Cpol::IDLE_LOW);
+        w.set_lsbfirst(pac::spi::vals::Lsbfirst::MSBFIRST);
+        w.set_ssm(true);
+        w.set_ssi(true);
+        w.set_rxonly(pac::spi::vals::Rxonly::FULL_DUPLEX);
+        w.set_dff(pac::spi::vals::Dff::BITS8);
+        w.set_crcen(false);
+        w.set_bidimode(pac::spi::vals::Bidimode::UNIDIRECTIONAL);
+        w.set_spe(true);
+    });
+    pac::SPI2.cr2().write(|w| w.set_ssoe(true));
+}
+
+#[inline(always)]
+fn spi2_transfer_8(data: &mut [u8; 8]) {
+    let dr = pac::SPI2.dr().as_ptr() as *mut u8;
+
+    for byte in data {
+        while !pac::SPI2.sr().read().txe() {}
+        unsafe { core::ptr::write_volatile(dr, *byte) };
+        while !pac::SPI2.sr().read().rxne() {}
+        *byte = unsafe { core::ptr::read_volatile(dr) };
+    }
+
+    while pac::SPI2.sr().read().bsy() {}
 }
