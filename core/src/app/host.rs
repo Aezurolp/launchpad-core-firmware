@@ -95,7 +95,7 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
     }
 
     pub fn route_surface_event(&mut self, event: SurfaceEvent) {
-        if (event.index != 0) {
+        if event.index != 0 {
             self.active_app_mut().on_surface(event);
         }
 

@@ -36,7 +36,7 @@ pub fn render(half_page: u8, factor: u8) {
     );
 
     #[cfg(feature = "no-setup-btn")]
-    led::set_rgb(SAVE_BUTTON, 0, 80, 0);
+    led::pulse(SAVE_BUTTON, 0xffff00);
 }
 
 pub fn handle_press(index: u8, half_page: u8) -> Action {

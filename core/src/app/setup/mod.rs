@@ -91,6 +91,9 @@ impl SetupApp {
         led::set(69, 0x101014);
         #[cfg(feature = "pressure-sensitive")]
         led::set(59, 0x101014);
+
+        #[cfg(feature = "no-setup-btn")]
+        led::pulse(95, 0x00ff00);
     }
 
     pub fn set_current_mode(&mut self, app: AppId) {
