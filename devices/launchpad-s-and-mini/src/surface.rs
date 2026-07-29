@@ -17,40 +17,6 @@ const SHIFT_BYTES: usize = LED_BYTES_PER_COL;
 const EVENT_QUEUE_LEN: usize = 8;
 const ENABLE_SWITCH_SCAN: bool = true;
 
-const SPI1_CR1: *mut u32 = 0x4001_3000 as *mut u32;
-const SPI1_CR2: *mut u32 = 0x4001_3004 as *mut u32;
-const SPI1_SR: *mut u32 = 0x4001_3008 as *mut u32;
-const SPI1_DR: *mut u32 = 0x4001_300c as *mut u32;
-const SPI2_CR1: *mut u32 = 0x4000_3800 as *mut u32;
-const SPI2_CR2: *mut u32 = 0x4000_3804 as *mut u32;
-const SPI2_SR: *mut u32 = 0x4000_3808 as *mut u32;
-const SPI2_DR: *mut u32 = 0x4000_380c as *mut u32;
-
-const TIM2_CR1: *mut u32 = 0x4000_0000 as *mut u32;
-const TIM2_DIER: *mut u32 = 0x4000_000c as *mut u32;
-const TIM2_SR: *mut u32 = 0x4000_0010 as *mut u32;
-const TIM2_EGR: *mut u32 = 0x4000_0014 as *mut u32;
-const TIM2_CNT: *mut u32 = 0x4000_0024 as *mut u32;
-const TIM2_PSC: *mut u32 = 0x4000_0028 as *mut u32;
-const TIM2_ARR: *mut u32 = 0x4000_002c as *mut u32;
-
-const SPI_CR1_MSTR: u32 = 1 << 2;
-const SPI_CR1_BR_0: u32 = 1 << 3;
-const SPI_CR1_CPHA: u32 = 1 << 0;
-const SPI_CR1_CPOL: u32 = 1 << 1;
-const SPI_CR1_SPE: u32 = 1 << 6;
-const SPI_CR1_LSBFIRST: u32 = 1 << 7;
-const SPI_CR1_SSI: u32 = 1 << 8;
-const SPI_CR1_SSM: u32 = 1 << 9;
-const SPI_SR_RXNE: u32 = 1 << 0;
-const SPI_SR_TXE: u32 = 1 << 1;
-const SPI_SR_BSY: u32 = 1 << 7;
-
-const TIM_CR1_CEN: u32 = 1 << 0;
-const TIM_DIER_UIE: u32 = 1 << 0;
-const TIM_SR_UIF: u32 = 1 << 0;
-const TIM_EGR_UG: u32 = 1 << 0;
-
 const BLANK_TICKS: u16 = 22;
 const SHIFT_TICKS: u16 = 15;
 
@@ -151,20 +117,19 @@ impl Surface {
         SURFACE.store(self as *mut Surface, Ordering::Release);
         ISR_READY.store(true, Ordering::Release);
 
+        hw::pac::RCC.apb1enr().modify(|w| w.set_tim2en(true));
+        hw::pac::TIM2.cr1().write(|w| w.set_cen(false));
+        hw::pac::TIM2.psc().write(|w| *w = 24 - 1);
+        hw::pac::TIM2.arr().write(|w| *w = hw::pac::timer::regs::ArrCore(BLANK_TICKS as u32));
+        hw::pac::TIM2.cnt().write(|w| *w = hw::pac::timer::regs::CntCore(0));
+        hw::pac::TIM2.egr().write(|w| w.set_ug(true));
+        hw::pac::TIM2.sr().write(|w| w.set_uif(false));
+        hw::pac::TIM2.dier().write(|w| w.set_uie(true));
+
         unsafe {
-            hw::modify_reg(0x4002_101c as *mut u32, |value| {
-                value | hw::RCC_APB1ENR_TIM2EN
-            });
-            hw::write_reg(TIM2_CR1, 0);
-            hw::write_reg(TIM2_PSC, 24 - 1);
-            hw::write_reg(TIM2_ARR, BLANK_TICKS as u32);
-            hw::write_reg(TIM2_CNT, 0);
-            hw::write_reg(TIM2_EGR, TIM_EGR_UG);
-            hw::write_reg(TIM2_SR, 0);
-            hw::write_reg(TIM2_DIER, TIM_DIER_UIE);
-            cortex_m::peripheral::NVIC::unmask(hw::Interrupt::Tim2);
-            hw::modify_reg(TIM2_CR1, |value| value | TIM_CR1_CEN);
+            cortex_m::peripheral::NVIC::unmask(hw::Interrupt::TIM2);
         }
+        hw::pac::TIM2.cr1().modify(|w| w.set_cen(true));
     }
 
     pub fn set_rgb_led(&mut self, index: u8, r: u8, g: u8, _b: u8) {
@@ -235,9 +200,7 @@ impl Surface {
                 ticks
             }
             3 => {
-                unsafe {
-                    hw::write_reg(hw::GPIOA_BSRR, 1 << 4);
-                }
+                hw::pac::GPIOA.bsrr().write(|w| w.set_bs(4, true));
                 self.phase = 4;
                 SHIFT_TICKS
             }
@@ -292,26 +255,24 @@ impl Surface {
     }
 
     fn blank(&self) {
-        unsafe {
-            hw::write_reg(hw::GPIOA_BSRR, 1 << (4 + 16));
-            self.deselect_cols();
-        }
+        hw::pac::GPIOA.bsrr().write(|w| w.set_br(4, true));
+        self.deselect_cols();
     }
 
     fn deselect_cols(&self) {
-        unsafe {
-            hw::write_reg(hw::GPIOB_BSRR, (1 << 0) | (1 << 1) | (1 << 2));
-        }
+        hw::pac::GPIOB.bsrr().write(|w| {
+            w.set_bs(0, true);
+            w.set_bs(1, true);
+            w.set_bs(2, true);
+        });
     }
 
     fn select_col(&self, col: u8) {
         self.deselect_cols();
-        unsafe {
-            match col {
-                0 => hw::write_reg(hw::GPIOB_BSRR, 1 << (0 + 16)),
-                1 => hw::write_reg(hw::GPIOB_BSRR, 1 << (1 + 16)),
-                _ => hw::write_reg(hw::GPIOB_BSRR, 1 << (2 + 16)),
-            }
+        match col {
+            0 => hw::pac::GPIOB.bsrr().write(|w| w.set_br(0, true)),
+            1 => hw::pac::GPIOB.bsrr().write(|w| w.set_br(1, true)),
+            _ => hw::pac::GPIOB.bsrr().write(|w| w.set_br(2, true)),
         }
     }
 
@@ -415,72 +376,60 @@ fn index_to_key(index: u8) -> usize {
 }
 
 fn init_pins_and_spi() {
-    unsafe {
-        hw::init_gpio_clocks();
-        hw::modify_reg(0x4002_1018 as *mut u32, |value| {
-            value | hw::RCC_APB2ENR_SPI1EN
-        });
-        hw::modify_reg(0x4002_101c as *mut u32, |value| {
-            value | hw::RCC_APB1ENR_SPI2EN
-        });
+    hw::init_gpio_clocks();
+    hw::pac::RCC.apb2enr().modify(|w| w.set_spi1en(true));
+    hw::pac::RCC.apb1enr().modify(|w| w.set_spi2en(true));
 
-        hw::write_reg(SPI1_CR1, 0);
-        hw::write_reg(SPI1_CR2, 0);
-        hw::write_reg(
-            SPI1_CR1,
-            SPI_CR1_CPOL
-                | SPI_CR1_MSTR
-                | SPI_CR1_BR_0
-                | SPI_CR1_LSBFIRST
-                | SPI_CR1_SSM
-                | SPI_CR1_SSI
-                | SPI_CR1_SPE,
-        );
+    hw::pac::SPI1.cr1().write(|w| {
+        w.set_cpol(hw::pac::spi::vals::Cpol::IDLE_LOW);
+        w.set_mstr(hw::pac::spi::vals::Mstr::MASTER);
+        w.set_br(hw::pac::spi::vals::Br::DIV4);
+        w.set_lsbfirst(hw::pac::spi::vals::Lsbfirst::LSBFIRST);
+        w.set_ssm(true);
+        w.set_ssi(true);
+        w.set_spe(true);
+    });
 
-        hw::write_reg(SPI2_CR1, 0);
-        hw::write_reg(SPI2_CR2, 0);
-        hw::write_reg(
-            SPI2_CR1,
-            SPI_CR1_CPHA
-                | SPI_CR1_MSTR
-                | SPI_CR1_BR_0
-                | SPI_CR1_LSBFIRST
-                | SPI_CR1_SSM
-                | SPI_CR1_SSI
-                | SPI_CR1_SPE,
-        );
-    }
+    hw::pac::SPI2.cr1().write(|w| {
+        w.set_cpha(hw::pac::spi::vals::Cpha::SECOND_EDGE);
+        w.set_mstr(hw::pac::spi::vals::Mstr::MASTER);
+        w.set_br(hw::pac::spi::vals::Br::DIV4);
+        w.set_lsbfirst(hw::pac::spi::vals::Lsbfirst::LSBFIRST);
+        w.set_ssm(true);
+        w.set_ssi(true);
+        w.set_spe(true);
+    });
 }
 
 fn spi1_transfer(tx: &[u8; NSWBYTES], rx: &mut [u8; NSWBYTES]) {
     for (index, &byte) in tx.iter().enumerate() {
+        while !hw::pac::SPI1.sr().read().txe() {}
         unsafe {
-            while hw::read_reg(SPI1_SR) & SPI_SR_TXE == 0 {}
-            ptr::write_volatile(SPI1_DR as *mut u8, byte);
-            while hw::read_reg(SPI1_SR) & SPI_SR_RXNE == 0 {}
-            rx[index] = ptr::read_volatile(SPI1_DR as *const u8);
+            ptr::write_volatile(hw::pac::SPI1.dr().as_ptr() as *mut u8, byte);
         }
+        while !hw::pac::SPI1.sr().read().rxne() {}
+        rx[index] = unsafe { ptr::read_volatile(hw::pac::SPI1.dr().as_ptr() as *const u8) };
     }
 
-    unsafe { while hw::read_reg(SPI1_SR) & SPI_SR_BSY != 0 {} }
+    while hw::pac::SPI1.sr().read().bsy() {}
 }
 
 fn spi_transfer(tx: &[u8; SHIFT_BYTES], rx: &mut [u8; SHIFT_BYTES]) {
     for (index, &byte) in tx.iter().enumerate() {
+        while !hw::pac::SPI2.sr().read().txe() {}
         unsafe {
-            while hw::read_reg(SPI2_SR) & SPI_SR_TXE == 0 {}
-            ptr::write_volatile(SPI2_DR as *mut u8, byte);
-            while hw::read_reg(SPI2_SR) & SPI_SR_RXNE == 0 {}
-            rx[index] = ptr::read_volatile(SPI2_DR as *const u8);
+            ptr::write_volatile(hw::pac::SPI2.dr().as_ptr() as *mut u8, byte);
         }
+        while !hw::pac::SPI2.sr().read().rxne() {}
+        rx[index] = unsafe { ptr::read_volatile(hw::pac::SPI2.dr().as_ptr() as *const u8) };
     }
 
-    unsafe { while hw::read_reg(SPI2_SR) & SPI_SR_BSY != 0 {} }
+    while hw::pac::SPI2.sr().read().bsy() {}
 }
 
 #[unsafe(export_name = "TIM2")]
 pub extern "C" fn tim2_handler() {
-    if unsafe { hw::read_reg(TIM2_SR) } & TIM_SR_UIF == 0 {
+    if !hw::pac::TIM2.sr().read().uif() {
         return;
     }
 
@@ -495,10 +444,8 @@ pub extern "C" fn tim2_handler() {
         BLANK_TICKS
     };
 
-    unsafe {
-        let ticks = ticks.max(2) as u32;
-        hw::write_reg(TIM2_ARR, ticks);
-        hw::write_reg(TIM2_CNT, 0);
-        hw::write_reg(TIM2_SR, 0);
-    }
+    let ticks = ticks.max(2) as u32;
+    hw::pac::TIM2.arr().write(|w| *w = hw::pac::timer::regs::ArrCore(ticks));
+    hw::pac::TIM2.cnt().write(|w| *w = hw::pac::timer::regs::CntCore(0));
+    hw::pac::TIM2.sr().write(|w| w.set_uif(false));
 }

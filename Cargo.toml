@@ -2,8 +2,7 @@
 members = [
   "core",
   "devices/launchpad-mini-mk3",
-  "devices/launchpad-mini-mk1",
-  "devices/launchpad-s",
+  "devices/launchpad-s-and-mini",
   "devices/launchpad-mk2",
   "devices/launchpad-pro",
   "devices/launchpad-pro-mk3",
@@ -14,8 +13,7 @@ members = [
 default-members = [
   "core",
   "devices/launchpad-mini-mk3",
-  "devices/launchpad-mini-mk1",
-  "devices/launchpad-s",
+  "devices/launchpad-s-and-mini",
   "devices/launchpad-mk2",
   "devices/launchpad-pro",
   "devices/launchpad-pro-mk3",
@@ -23,6 +21,7 @@ default-members = [
   "devices/mystrix-pro",
 ]
 resolver = "2"
+
 
 [workspace.package]
 edition = "2024"

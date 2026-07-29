@@ -6,6 +6,12 @@ use crate::usb;
 use firmware_core::driver::Driver;
 use firmware_core::sys::midi::MidiPort;
 
+#[cfg(feature = "launchpad-mini-mk1")]
+const DEVICE_ID: u8 = 0x36;
+
+#[cfg(not(feature = "launchpad-mini-mk1"))]
+const DEVICE_ID: u8 = 32;
+
 pub struct RuntimeDriver {
     surface: *mut Surface,
 }
@@ -61,6 +67,6 @@ impl Driver for RuntimeDriver {
     fn write_flash(&mut self, _offset: u32, _data: &[u8]) {}
 
     fn device_id(&self) -> u8 {
-        32
+        DEVICE_ID
     }
 }

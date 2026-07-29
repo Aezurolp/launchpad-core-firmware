@@ -16,9 +16,10 @@ use firmware_core::app::{AppHost, AppId, SurfaceEvent};
 use firmware_core::driver;
 use panic_halt as _;
 use runtime::RuntimeDriver;
+use stm32_metapac as _;
 use surface::Surface;
 
-type LaunchpadMiniMk1AppHost = AppHost<boot::BootApp, app::LiveApp>;
+type LaunchpadRgAppHost = AppHost<boot::BootApp, app::LiveApp>;
 
 #[entry]
 fn main() -> ! {
@@ -43,7 +44,7 @@ fn main() -> ! {
 
     static mut SURFACE: Surface = Surface::new();
     static mut RUNTIME: RuntimeDriver = RuntimeDriver::new(core::ptr::null_mut());
-    static mut APP_HOST: LaunchpadMiniMk1AppHost =
+    static mut APP_HOST: LaunchpadRgAppHost =
         AppHost::new(AppId::Performance, boot::BootApp::new(), app::LiveApp::new());
 
     let surface = unsafe { &mut *core::ptr::addr_of_mut!(SURFACE) };
@@ -106,31 +107,25 @@ fn main() -> ! {
 }
 
 fn init_board_gpios() {
-    unsafe {
-        hw::init_gpio_clocks();
-        hw::write_reg(hw::GPIOA_ODR, 0);
-        hw::write_reg(hw::GPIOA_CRL, 0x1491_1111);
-        hw::write_reg(hw::GPIOA_CRH, 0x4444_4111);
-        hw::write_reg(hw::GPIOB_ODR, 7);
-        hw::write_reg(hw::GPIOB_CRL, 0x1114_4111);
-        hw::write_reg(hw::GPIOB_CRH, 0x9191_1111);
-        hw::write_reg(hw::GPIOC_CRL, 0x1111_1111);
-        hw::write_reg(hw::GPIOC_CRH, 0x1111_1111);
-        hw::write_reg(hw::GPIOD_CRL, 0x1111_1111);
-        hw::write_reg(hw::GPIOD_CRH, 0x1111_1111);
-        usb_disable_pullup();
-        cortex_m::asm::delay(hw::SYSCLK_HZ / 50);
-    }
+    hw::init_gpio_clocks();
+    hw::pac::GPIOA.odr().write_value(hw::pac::gpio::regs::Odr(0));
+    hw::pac::GPIOA.cr(0).write_value(hw::pac::gpio::regs::Cr(0x1491_1111));
+    hw::pac::GPIOA.cr(1).write_value(hw::pac::gpio::regs::Cr(0x4444_4111));
+    hw::pac::GPIOB.odr().write_value(hw::pac::gpio::regs::Odr(7));
+    hw::pac::GPIOB.cr(0).write_value(hw::pac::gpio::regs::Cr(0x1114_4111));
+    hw::pac::GPIOB.cr(1).write_value(hw::pac::gpio::regs::Cr(0x9191_1111));
+    hw::pac::GPIOC.cr(0).write_value(hw::pac::gpio::regs::Cr(0x1111_1111));
+    hw::pac::GPIOC.cr(1).write_value(hw::pac::gpio::regs::Cr(0x1111_1111));
+    hw::pac::GPIOD.cr(0).write_value(hw::pac::gpio::regs::Cr(0x1111_1111));
+    hw::pac::GPIOD.cr(1).write_value(hw::pac::gpio::regs::Cr(0x1111_1111));
+    usb_disable_pullup();
+    cortex_m::asm::delay(hw::SYSCLK_HZ / 50);
 }
 
 fn usb_enable_pullup() {
-    unsafe {
-        hw::write_reg(hw::GPIOA_BSRR, 1 << 10);
-    }
+    hw::pac::GPIOA.bsrr().write(|w| w.set_bs(10, true));
 }
 
 fn usb_disable_pullup() {
-    unsafe {
-        hw::write_reg(hw::GPIOA_BSRR, 1 << (10 + 16));
-    }
+    hw::pac::GPIOA.bsrr().write(|w| w.set_br(10, true));
 }
