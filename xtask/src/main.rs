@@ -78,7 +78,6 @@ const ALL_DEVICES: &[&str] = &[
     "mk2",
     "lpp",
     "lppmk3",
-    "matrixpro",
 ];
 
 fn device_cfg(name: &str) -> Option<DeviceCfg> {
