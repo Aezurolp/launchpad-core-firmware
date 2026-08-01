@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 pub mod device_inquiry;
+mod led_control;
 
 use firmware_core::app::AppId;
 use firmware_core::sys::midi::MidiPort;
@@ -15,6 +16,11 @@ impl SysExHandler for Handler {
             return true;
         }
 
+        if led_control::handle(data) {
+            return true;
+        }
+
         DefaultSysExHandler::execute(app, port, data)
     }
 }
+
