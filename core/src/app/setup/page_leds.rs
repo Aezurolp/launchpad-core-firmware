@@ -5,10 +5,17 @@ use crate::app::SurfaceEvent;
 use crate::app::setup::page::Page;
 use crate::app::setup::text::Text;
 use crate::driver;
+use crate::sys::led;
+use crate::sys::rotation::{self, Rotation};
 use crate::sys::settings;
 
 const BRIGHTNESS_START: u8 = 31;
 const BRIGHTNESS_END: u8 = 38;
+
+const ROTATION_DEFAULT_BUTTON: u8 = 91;
+const ROTATION_UPSIDE_DOWN: u8 = 92;
+const ROTATION_LEFT_BUTTON: u8 = 93;
+const ROTATION_RIGHT_BUTTON: u8 = 94;
 
 pub struct LedsPage {
     text: Text,
@@ -30,16 +37,16 @@ impl LedsPage {
         let brightness = driver::brightness().min(7);
 
         for level in 0..8 {
-            driver::set_led(BRIGHTNESS_START + level, 0x101010);
+            led::set(BRIGHTNESS_START + level, 0x101010);
         }
 
-        driver::set_led(BRIGHTNESS_START + brightness, 0xccccff);
+        led::set(BRIGHTNESS_START + brightness, 0xccccff);
     }
 
     #[cfg(feature = "launchpad-pro-mk3")]
     fn draw_mirror_toggle(&self) {
         let mirror_enabled = settings::with(|s| s.mirror_enabled);
-        driver::set_led(
+        led::set(
             11,
             if mirror_enabled != 0 {
                 0x10ff10
@@ -48,16 +55,54 @@ impl LedsPage {
             },
         );
     }
+    // Feature flag this later for mystrix because it doesn't have side buttons :p
+    fn draw_rotation_selector(&self) {
+        let rotation = rotation::get();
+
+        led::set_raw(
+            ROTATION_DEFAULT_BUTTON,
+            if rotation == Rotation::Default {
+                0xffffff
+            } else {
+                0x202020
+            },
+        );
+        led::set_raw(
+            ROTATION_UPSIDE_DOWN,
+            if rotation == Rotation::UpsideDown {
+                0xffffff
+            } else {
+                0x202020
+            },
+        );
+        led::set_raw(
+            ROTATION_LEFT_BUTTON,
+            if rotation == Rotation::Left {
+                0xffffff
+            } else {
+                0x202020
+            },
+        );
+        led::set_raw(
+            ROTATION_RIGHT_BUTTON,
+            if rotation == Rotation::Right {
+                0xffffff
+            } else {
+                0x202020
+            },
+        );
+    }
 }
 
 impl Page for LedsPage {
     fn on_enter(&mut self) {
-        driver::set_led(79, 0x0a0a55);
+        led::set_raw(79, 0x0a0a55);
 
         self.text.draw();
         self.draw_brightness_selector();
         #[cfg(feature = "launchpad-pro-mk3")]
         self.draw_mirror_toggle();
+        self.draw_rotation_selector();
     }
 
     fn on_surface(&mut self, event: SurfaceEvent) {
@@ -82,5 +127,29 @@ impl Page for LedsPage {
         });
 
         self.draw_brightness_selector();
+    }
+
+    fn on_surface_raw(&mut self, event: SurfaceEvent) {
+        if !event.pressed {
+            return;
+        }
+
+        let new_rotation = match event.index {
+            ROTATION_DEFAULT_BUTTON => Some(Rotation::Default),
+            ROTATION_UPSIDE_DOWN => Some(Rotation::UpsideDown),
+            ROTATION_LEFT_BUTTON => Some(Rotation::Left),
+            ROTATION_RIGHT_BUTTON => Some(Rotation::Right),
+            _ => None,
+        };
+
+        if let Some(new_rotation) = new_rotation {
+            rotation::set(new_rotation);
+            for row in 1..=8 {
+                for col in 1..=8 {
+                    led::set_raw(row * 10 + col, 0);
+                }
+            }
+            self.on_enter();
+        }
     }
 }

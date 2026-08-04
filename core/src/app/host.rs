@@ -10,6 +10,7 @@ use crate::app::setup::SetupApp;
 use crate::app::{AftertouchEvent, App, AppId, MidiEvent, SurfaceEvent};
 use crate::sys::led;
 use crate::sys::midi::MidiPort;
+use crate::sys::rotation;
 #[cfg(not(feature = "no-setup-btn"))]
 use crate::sys::settings;
 use crate::sys::sysex::{DefaultSysExHandler, SysExHandler, modes};
@@ -96,7 +97,11 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
 
     pub fn route_surface_event(&mut self, event: SurfaceEvent) {
         if event.index != 0 {
-            self.active_app_mut().on_surface(event);
+            let mut canonical_event = event;
+            canonical_event.index = self.to_canonical_index(event.index);
+
+            self.active_app_mut().on_surface(canonical_event);
+            self.active_app_mut().on_surface_raw(event);
         }
 
         #[cfg(feature = "no-setup-btn")]
@@ -110,6 +115,15 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
         }
 
         self.apply_requested_app_switch();
+    }
+
+    // Only rotates the main grid in setup mode, every other app rotates.
+    fn to_canonical_index(&self, raw_index: u8) -> u8 {
+        if self.current == AppId::Setup {
+            rotation::to_canonical_grid_only(raw_index)
+        } else {
+            rotation::to_canonical(raw_index)
+        }
     }
 
     pub fn route_midi_event(&mut self, event: MidiEvent) {
@@ -130,7 +144,10 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
     }
 
     pub fn route_aftertouch_event(&mut self, event: AftertouchEvent) {
-        self.active_app_mut().on_aftertouch(event);
+        let mut canonical_event = event;
+        canonical_event.index = self.to_canonical_index(event.index);
+
+        self.active_app_mut().on_aftertouch(canonical_event);
         self.apply_requested_app_switch();
     }
 

@@ -49,7 +49,7 @@ impl VelocityPage {
 
 impl Page for VelocityPage {
     fn on_enter(&mut self) {
-        led::set(69, 0x551500);
+        led::set_raw(69, 0x551500);
         self.text.draw();
         self.draw();
     }

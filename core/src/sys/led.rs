@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 use crate::driver;
+use crate::sys::rotation;
 #[cfg(feature = "rgb-color")]
 use crate::sys::settings;
 #[cfg(feature = "rgb-color")]
@@ -115,17 +116,32 @@ impl LedStateSlot {
 
 static LED_STATE: LedStateSlot = LedStateSlot::new();
 
+// Set now cares about orientation. This will not break the setup menu.
 pub fn set(index: u8, color: u32) {
+    set_raw(rotation::to_raw(index), color);
+}
+
+// Same set but if you want to not mess with the orientation and light up a button regardless.
+pub fn set_raw(index: u8, color: u32) {
     update_base(index, LedColor::rgb8(color));
     driver::set_led(index, color);
 }
 
+// Same as the above two but for rgb
 pub fn set_rgb(index: u8, r: u8, g: u8, b: u8) {
+    set_rgb_raw(rotation::to_raw(index), r, g, b);
+}
+
+pub fn set_rgb_raw(index: u8, r: u8, g: u8, b: u8) {
     update_base(index, LedColor::raw6(r, g, b));
     driver::set_rgb_led(index, r, g, b);
 }
 
 pub fn set_palette(index: u8, velocity: u8) {
+    set_palette_raw(rotation::to_raw(index), velocity);
+}
+
+pub fn set_palette_raw(index: u8, velocity: u8) {
     #[cfg(feature = "rgb-color")]
     let (r, g, b) = settings::with(|settings| match settings.palette {
         0 => PALETTE_NOVATION.rgb(velocity),
@@ -152,6 +168,10 @@ pub fn set_palette(index: u8, velocity: u8) {
 }
 
 pub fn novation(index: u8, velocity: u8) {
+    novation_raw(rotation::to_raw(index), velocity);
+}
+
+pub fn novation_raw(index: u8, velocity: u8) {
     #[cfg(feature = "rgb-color")]
     let (r, g, b) = PALETTE_NOVATION.rgb(velocity);
 
@@ -163,13 +183,17 @@ pub fn novation(index: u8, velocity: u8) {
 }
 
 pub fn pulse(index: u8, color: u32) {
+    pulse_raw(rotation::to_raw(index), color);
+}
+
+pub fn pulse_raw(index: u8, color: u32) {
     if !is_valid_index(index) {
         return;
     }
 
     let color = LedColor::rgb8(color);
     if color.is_black() {
-        set(index, 0);
+        set_raw(index, 0);
         return;
     }
 
@@ -178,13 +202,17 @@ pub fn pulse(index: u8, color: u32) {
 }
 
 pub fn pulse_rgb(index: u8, r: u8, g: u8, b: u8) {
+    pulse_rgb_raw(rotation::to_raw(index), r, g, b);
+}
+
+pub fn pulse_rgb_raw(index: u8, r: u8, g: u8, b: u8) {
     if !is_valid_index(index) {
         return;
     }
 
     let color = LedColor::raw6(r, g, b);
     if color.is_black() {
-        set_rgb(index, 0, 0, 0);
+        set_rgb_raw(index, 0, 0, 0);
         return;
     }
 
@@ -193,6 +221,10 @@ pub fn pulse_rgb(index: u8, r: u8, g: u8, b: u8) {
 }
 
 pub fn flash(index: u8, color: u32) {
+    flash_raw(rotation::to_raw(index), color);
+}
+
+pub fn flash_raw(index: u8, color: u32) {
     if !is_valid_index(index) {
         return;
     }
@@ -203,6 +235,10 @@ pub fn flash(index: u8, color: u32) {
 }
 
 pub fn flash_rgb(index: u8, r: u8, g: u8, b: u8) {
+    flash_rgb_raw(rotation::to_raw(index), r, g, b);
+}
+
+pub fn flash_rgb_raw(index: u8, r: u8, g: u8, b: u8) {
     if !is_valid_index(index) {
         return;
     }

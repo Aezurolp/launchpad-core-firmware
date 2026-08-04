@@ -75,8 +75,8 @@ impl SetupApp {
 
     fn render_page_tabs() {
         // Init and Leds are always present
-        led::set(89, 0x101014);
-        led::set(
+        led::set_raw(89, 0x101014);
+        led::set_raw(
             90,
             if driver::highspeed_leds_enabled() {
                 0x000000
@@ -84,16 +84,23 @@ impl SetupApp {
                 0xff0000
             },
         );
-        led::set(79, 0x101014);
+        led::set_raw(79, 0x101014);
 
         // Velocity and Aftertouch tabs only on pressure-sensitive devices
         #[cfg(feature = "pressure-sensitive")]
-        led::set(69, 0x101014);
+        led::set_raw(69, 0x101014);
         #[cfg(feature = "pressure-sensitive")]
-        led::set(59, 0x101014);
+        led::set_raw(59, 0x101014);
 
         #[cfg(feature = "no-setup-btn")]
-        led::pulse(95, 0x00ff00);
+        led::pulse_raw(95, 0xff0000);
+    }
+
+    /// Redraws the current page.
+    fn redraw_current_page(&mut self) {
+        led::clear();
+        Self::render_page_tabs();
+        self.current_page_mut().on_enter();
     }
 
     pub fn set_current_mode(&mut self, app: AppId) {
@@ -115,25 +122,29 @@ impl App for SetupApp {
     fn on_exit(&mut self) {}
 
     fn on_surface(&mut self, event: SurfaceEvent) {
+        // `event.index` here has already been translated for the current
+        // rotation (main grid only). Edge buttons are handled in
+        // `on_surface_raw` below since they never rotate in setup.
+        self.current_page_mut().on_surface(event);
+    }
+
+    fn on_surface_raw(&mut self, event: SurfaceEvent) {
         if event.index % 10 == 9 && event.pressed {
             let Some(page) = Self::page_for_button(event.index) else {
                 return;
             };
 
             self.page = page;
-            led::clear();
-            Self::render_page_tabs();
-
-            self.current_page_mut().on_enter();
+            self.redraw_current_page();
             return;
         }
 
-        self.current_page_mut().on_surface(event);
+        self.current_page_mut().on_surface_raw(event);
     }
 
-    fn on_midi(&mut self, _event: MidiEvent) { }
+    fn on_midi(&mut self, _event: MidiEvent) {}
 
-    fn on_aftertouch(&mut self, _event: AftertouchEvent) { }
+    fn on_aftertouch(&mut self, _event: AftertouchEvent) {}
 
     fn on_tick(&mut self) {
         self.current_page_mut().on_tick();

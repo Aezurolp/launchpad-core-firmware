@@ -147,7 +147,7 @@ impl InitPage {
 
 impl Page for InitPage {
     fn on_enter(&mut self) {
-        led::set(89, 0x550000);
+        led::set_raw(89, 0x550000);
 
         self.text.draw();
         led::set(57, 0x100000);
