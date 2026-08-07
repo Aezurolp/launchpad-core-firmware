@@ -108,6 +108,7 @@ impl SetupApp {
     }
 
     pub fn finish_setup(&mut self) -> Option<AppId> {
+        led::clear();
         settings::save();
         self.init_page.take_selected_mode()
     }
