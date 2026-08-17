@@ -60,9 +60,7 @@ fn find_objcopy() -> Result<PathBuf, Box<dyn Error>> {
 
 struct DeviceCfg {
     device: &'static str,
-    package: &'static str,
-    features: &'static [&'static str],
-    elf_name: &'static str,
+    feature: &'static str,
     target_triple: &'static str,
     syx_product: &'static str,
     default_version: &'static str,
@@ -84,9 +82,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
     match name {
         "lpx" => Some(DeviceCfg {
             device: "lpx",
-            package: "launchpad-x",
-            features: &[],
-            elf_name: "launchpad-x",
+            feature: "launchpad-x",
             target_triple: "thumbv7em-none-eabihf",
             syx_product: "/x",
             default_version: "351",
@@ -95,9 +91,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "mini" => Some(DeviceCfg {
             device: "mini",
-            package: "launchpad-mini-mk3",
-            features: &[],
-            elf_name: "launchpad-mini-mk3",
+            feature: "launchpad-mini-mk3",
             target_triple: "thumbv7em-none-eabihf",
             syx_product: "/minimk3",
             default_version: "407",
@@ -106,9 +100,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "lps" | "launchpad-s" => Some(DeviceCfg {
             device: "lps",
-            package: "launchpad-s-and-mini",
-            features: &["--no-default-features", "--features", "launchpad-s"],
-            elf_name: "launchpad-s-and-mini",
+            feature: "launchpad-s",
             target_triple: "thumbv7m-none-eabi",
             syx_product: "/lps",
             default_version: "999",
@@ -117,9 +109,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "minimk1" => Some(DeviceCfg {
             device: "minimk1",
-            package: "launchpad-s-and-mini",
-            features: &["--no-default-features", "--features", "launchpad-mini-mk1"],
-            elf_name: "launchpad-s-and-mini",
+            feature: "launchpad-mini-mk1",
             target_triple: "thumbv7m-none-eabi",
             syx_product: "/minimk1",
             default_version: "999",
@@ -128,9 +118,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "mk2" => Some(DeviceCfg {
             device: "mk2",
-            package: "launchpad-mk2",
-            features: &[],
-            elf_name: "launchpad-mk2",
+            feature: "launchpad-mk2",
             target_triple: "thumbv7m-none-eabi",
             syx_product: "/mk2",
             default_version: "999",
@@ -139,9 +127,7 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "lpp" | "pro" => Some(DeviceCfg {
             device: "lpp",
-            package: "launchpad-pro",
-            features: &[],
-            elf_name: "launchpad-pro",
+            feature: "launchpad-pro",
             target_triple: "thumbv7m-none-eabi",
             syx_product: "/lpp",
             default_version: "154",
@@ -150,12 +136,9 @@ fn device_cfg(name: &str) -> Option<DeviceCfg> {
         }),
         "lppmk3" | "pro-mk3" => Some(DeviceCfg {
             device: "lppmk3",
-            package: "launchpad-pro-mk3",
-            features: &[],
-            elf_name: "launchpad-pro-mk3",
+            feature: "launchpad-pro-mk3",
             target_triple: "thumbv7em-none-eabihf",
             syx_product: "/lppmk3",
-
             default_version: "999",
             artifact_stem: "core-launchpad-pro-mk3",
             objcopy_pad_to: Some("0x08080000"),
@@ -218,10 +201,16 @@ fn package(
         .unwrap_or(cfg.default_version);
     let profile = if release { "release" } else { "debug" };
 
-    let mut cargo_args = vec!["build", "-p", cfg.package, "--target", cfg.target_triple];
-    for &feat in cfg.features {
-        cargo_args.push(feat);
-    }
+    let mut cargo_args = vec![
+        "build",
+        "--bin",
+        "core",
+        "--target",
+        cfg.target_triple,
+        "--no-default-features",
+        "--features",
+        cfg.feature,
+    ];
     if release {
         cargo_args.push("--release");
     }
@@ -231,7 +220,7 @@ fn package(
         .join("target")
         .join(cfg.target_triple)
         .join(profile)
-        .join(cfg.elf_name);
+        .join("core");
     if !elf.exists() {
         return Err(format!("ELF not found: {}", elf.display()).into());
     }
