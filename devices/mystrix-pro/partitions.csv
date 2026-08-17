@@ -1,8 +1,0 @@
-# Matrix Pro / ESP32-S3, matching MatrixOS offsets. CoreFW settings need 6 KiB;
-# the partition is rounded up to two 4 KiB flash erase sectors.
-# Name, Type, SubType, Offset, Size, Flags
-nvs,      data, nvs,       0x9000,   20K,
-otadata,  data, ota,       0xe000,    8K,
-os,       app,  ota_0,     0x10000, 3776K,
-corefw,   data, undefined, 0x7b0000,   8K,
-uf2,      data, undefined, 0x7c0000, 256K,

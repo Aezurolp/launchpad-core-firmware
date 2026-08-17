@@ -55,7 +55,6 @@ impl LedsPage {
             },
         );
     }
-    // Feature flag this later for mystrix because it doesn't have side buttons :p
     fn draw_rotation_selector(&self) {
         let rotation = rotation::get();
 

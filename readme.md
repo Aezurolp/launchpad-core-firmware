@@ -49,14 +49,6 @@ Novation Launchpad support:
 | Launchpad Mini Mk1 |   ✅    | ❌  |       ❌        |      ❌       |
 | Launchpad S        |   ✅    | ❌  |       ❌        |      ❌       |
 
----
-
-Other devices:
-
-| Device      | Working | RGB | Custom Palettes | Highspeed LED |
-| ----------- | :-----: | :-: | :-------------: | :-----------: |
-| Mystrix Pro |   ✅    | ✅  |       ✅        |      ❌       |
-
 ## Roadmap
 
 - Native Live Modes for all Launchpads
@@ -87,34 +79,12 @@ Available `<device>` targets:
 | `mk2`     | Launchpad Mk2          |
 | `minimk1` | Launchpad Mini Mk1     |
 | `lps`     | Launchpad S            |
-| `mxpro`   | Mystrix Pro (ESP32-S3) |
 
 To build all targets at once:
 
 ```sh
 cargo all
 ```
-
-The Mystrix Pro target uses the ESP Rust toolchain installed by `espup` and produces
-the MatrixOS-compatible UF2 image `build/core-mystrix-pro.uf2`:
-
-```sh
-cargo mxpro
-```
-
-The UF2 contains the ESP32-S3 application image expected by the Mystrix OTA
-bootloader; it does not overwrite the factory bootloader or partition table.
-
-Put the device into its UF2 bootloader mode, then copy that UF2 file to the mounted
-bootloader volume. During development, the ELF can still be flashed directly with
-`espflash`.
-
-Hold the centre FN button during boot to enter the hardware test mode. It verifies
-the 64 pad LEDs, 32 underglow LEDs, pressure pads, touch strips, and FN button.
-
-Matrix Pro pin assignments, LED-chain order, touch-strip mappings, and calibration
-defaults are independently reimplemented from the MIT-licensed MatrixOS Mystrix1
-hardware definitions.
 
 ### Flashing the firmware manually
 
