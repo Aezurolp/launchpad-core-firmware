@@ -2,99 +2,30 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use firmware_core::app::AppId;
-use firmware_core::sys::midi::MidiPort;
-use firmware_core::sys::sysex::{DefaultSysExHandler, SysExHandler, fastled, led_control};
-use firmware_core::{driver, sys::led};
-
-use crate::runtime::{
-    self, M0_ROM_STATUS_ARG, M0_ROM_STATUS_OK, M0_ROM_STATUS_RX, M0FirmwareStatus, M0ProbeResult,
-};
+use crate::app::AppId;
+use crate::driver::{self, M0FirmwareStatus, M0ProbeResult, RoadrunnerStats};
+use crate::sys::midi::MidiPort;
 
 const NOVATION_HEADER: [u8; 6] = [0xf0, 0x00, 0x20, 0x29, 0x02, 0x0e];
-const LED_SYSEX_DEVICE_ID: u8 = 0x0e;
 const M0_REQ_CMD: u8 = 0x70;
 const M0_RESP_CMD: u8 = 0x71;
 const M0_FLASH_CHUNK_LEN: usize = 256;
+
+pub const M0_ROM_STATUS_OK: u8 = 0;
+pub const M0_ROM_STATUS_RX: u8 = 5;
+pub const M0_ROM_STATUS_ARG: u8 = 6;
+
 static M0_FLASH_ACTIVE: AtomicBool = AtomicBool::new(false);
 static BOOT_CYCLE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-pub mod device_inquiry;
-
-pub struct Handler;
-
-impl SysExHandler for Handler {
-    fn execute(app: AppId, port: MidiPort, data: &[u8]) -> bool {
-        if device_inquiry::Handler::execute(app, port, data) {
-            return true;
-        }
-
-        if handle_m0(port, data) {
-            return true;
-        }
-
-        if led_control::handle_modern(data, LED_SYSEX_DEVICE_ID, &mut LedTarget) {
-            return true;
-        }
-
-        if app == AppId::Performance && handle_fastled(data) {
-            return true;
-        }
-
-        DefaultSysExHandler::execute(app, port, data)
-    }
-
-    fn take_requested_app_switch() -> Option<AppId> {
-        BOOT_CYCLE_REQUESTED
-            .swap(false, Ordering::AcqRel)
-            .then_some(AppId::Boot)
-    }
+pub fn execute(_app: AppId, port: MidiPort, data: &[u8]) -> bool {
+    handle_m0(port, data)
 }
 
-struct LedTarget;
-
-impl led_control::LedTarget for LedTarget {
-    fn set_palette(&mut self, index: u8, velocity: u8) {
-        led::set_palette(index, velocity);
-    }
-
-    fn set_rgb(&mut self, index: u8, r: u8, g: u8, b: u8) {
-        led::set_rgb(index, r, g, b);
-    }
-}
-
-fn handle_fastled(data: &[u8]) -> bool {
-    fastled::handle_targets(data, |target, r, g, b| {
-        set_fastled_target(target, r, g, b);
-    })
-}
-
-fn set_fastled_target(target: u8, r: u8, g: u8, b: u8) {
-    match target {
-        0 => {
-            for index in 0..99 {
-                led::set_rgb(index, r, g, b);
-            }
-        }
-        1..=8 => {
-            driver::set_rgb_led(100 + target, r, g, b);
-            led::set_rgb(target, r, g, b);
-        }
-        9..=99 => led::set_rgb(target, r, g, b),
-        100..=109 => {
-            let start = (target - 100) * 10 + 1;
-            for index in start..start + 8 {
-                led::set_rgb(index, r, g, b);
-            }
-        }
-        110..=119 => {
-            let start = target - 100;
-            for index in (start..90).step_by(10) {
-                led::set_rgb(index, r, g, b);
-            }
-        }
-        _ => {}
-    }
+pub fn take_requested_app_switch() -> Option<AppId> {
+    BOOT_CYCLE_REQUESTED
+        .swap(false, Ordering::AcqRel)
+        .then_some(AppId::Boot)
 }
 
 fn handle_m0(port: MidiPort, data: &[u8]) -> bool {
@@ -121,28 +52,28 @@ fn handle_m0(port: MidiPort, data: &[u8]) -> bool {
 }
 
 fn handle_cached_status(port: MidiPort) {
-    match runtime::with_runtime(|driver| driver.cached_m0_firmware_status()) {
+    match driver::cached_m0_firmware_status() {
         Some(status) => send_status_response(port, b'C', &status),
         None => send_simple_response(port, b'C', M0_ROM_STATUS_ARG),
     }
 }
 
 fn handle_flash_info(port: MidiPort) {
-    match runtime::with_runtime(|driver| driver.flash_info()) {
+    match driver::flash_info() {
         Some(info) => send_flash_info_response(port, info.present, &info.jedec_id, info.status1),
         None => send_simple_response(port, b'F', M0_ROM_STATUS_ARG),
     }
 }
 
 fn handle_status(port: MidiPort) {
-    match runtime::with_runtime(|driver| driver.refresh_m0_firmware_status()) {
+    match driver::refresh_m0_firmware_status() {
         Some(status) => send_status_response(port, b'S', &status),
         None => send_simple_response(port, b'S', M0_ROM_STATUS_ARG),
     }
 }
 
 fn handle_roadrunner_stats(port: MidiPort) {
-    match runtime::with_runtime(|driver| driver.roadrunner_stats()) {
+    match driver::roadrunner_stats() {
         Some(Some(stats)) => send_roadrunner_stats_response(port, stats),
         _ => send_simple_response(port, b'T', M0_ROM_STATUS_RX),
     }
@@ -163,14 +94,7 @@ fn handle_flash_begin(port: MidiPort, data: &[u8]) {
         return;
     }
 
-    let status = runtime::with_m0(|link| {
-        let probe = link.force_rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-        link.rom_mass_erase()
-    })
-    .unwrap_or(M0_ROM_STATUS_ARG);
+    let status = driver::m0_force_rom_probe();
     M0_FLASH_ACTIVE.store(status == M0_ROM_STATUS_OK, Ordering::Release);
     send_simple_response(port, b'B', status);
 }
@@ -181,14 +105,7 @@ fn handle_flash_data(port: MidiPort, data: &[u8]) {
         return;
     };
 
-    let status = runtime::with_m0(|link| {
-        let probe = link.rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-        link.rom_write(chunk.addr, &chunk.data[..chunk.len])
-    })
-    .unwrap_or(M0_ROM_STATUS_ARG);
+    let status = driver::m0_rom_write(chunk.addr, &chunk.data[..chunk.len]);
     let len = if status == M0_ROM_STATUS_OK {
         chunk.len
     } else {
@@ -203,24 +120,17 @@ fn handle_flash_verify(port: MidiPort, data: &[u8]) {
         return;
     };
 
-    let status = runtime::with_m0(|link| {
-        let probe = link.rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-
-        let mut readback = [0u8; M0_FLASH_CHUNK_LEN];
-        let status = link.rom_read(chunk.addr, &mut readback[..chunk.len]);
-        if status != M0_ROM_STATUS_OK {
-            return status;
-        }
+    let mut readback = [0u8; M0_FLASH_CHUNK_LEN];
+    let status = driver::m0_rom_read(chunk.addr, &mut readback[..chunk.len]);
+    let status = if status == M0_ROM_STATUS_OK {
         if readback[..chunk.len] == chunk.data[..chunk.len] {
             M0_ROM_STATUS_OK
         } else {
             M0_ROM_STATUS_ARG
         }
-    })
-    .unwrap_or(M0_ROM_STATUS_ARG);
+    } else {
+        status
+    };
     let len = if status == M0_ROM_STATUS_OK {
         chunk.len
     } else {
@@ -231,8 +141,8 @@ fn handle_flash_verify(port: MidiPort, data: &[u8]) {
 
 fn handle_boot(port: MidiPort) {
     let completes_flash = M0_FLASH_ACTIVE.swap(false, Ordering::AcqRel);
-    let _ = runtime::with_m0(|link| link.set_mode(2));
-    match runtime::with_runtime(|driver| driver.refresh_m0_firmware_status()) {
+    driver::m0_set_mode(2);
+    match driver::refresh_m0_firmware_status() {
         Some(status) => {
             let firmware_started = status.status == M0_ROM_STATUS_OK;
             send_status_response(port, b'O', &status);
@@ -295,7 +205,7 @@ fn send_flash_info_response(port: MidiPort, present: bool, jedec_id: &[u8; 3], s
     send_response(port, &mut resp, idx);
 }
 
-fn send_roadrunner_stats_response(port: MidiPort, stats: runtime::RoadrunnerStats) {
+fn send_roadrunner_stats_response(port: MidiPort, stats: RoadrunnerStats) {
     let mut resp = [0u8; 32];
     let mut idx = response_prefix(&mut resp, b'T');
     append_hex8(&mut resp, &mut idx, M0_ROM_STATUS_OK);
@@ -343,7 +253,7 @@ fn response_prefix(resp: &mut [u8], cmd: u8) -> usize {
 
 fn send_response(port: MidiPort, resp: &mut [u8], idx: usize) {
     resp[idx] = 0xf7;
-    firmware_core::driver::send_midi(port, &resp[..idx + 1]);
+    driver::send_midi(port, &resp[..idx + 1]);
 }
 
 fn parse_hex(data: &[u8], off: usize, digits: usize) -> Option<u32> {

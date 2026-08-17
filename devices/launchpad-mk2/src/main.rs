@@ -10,7 +10,6 @@ pub mod inputs;
 pub mod leds;
 pub mod runtime;
 pub mod surface;
-pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
@@ -27,7 +26,7 @@ use static_cell::StaticCell;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_3400;
 
-type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {

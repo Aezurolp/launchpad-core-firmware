@@ -8,7 +8,6 @@ pub mod extflash;
 pub mod led;
 mod map;
 mod runtime;
-mod sysex;
 pub mod usb;
 pub fn init_usb_board() {
     let otg = stm32_metapac::USB_OTG_FS;
@@ -49,7 +48,7 @@ use static_cell::StaticCell;
 
 use crate::runtime::RuntimeDriver;
 
-type AppHostType = AppHost<sysex::Handler>;
+type AppHostType = AppHost;
 static APP_HOST: StaticCell<
     embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::ThreadModeRawMutex, AppHostType>,
 > = StaticCell::new();
@@ -112,7 +111,6 @@ async fn main(spawner: Spawner) {
     ));
     driver::install(runtime_driver);
     settings::load();
-    runtime::install_runtime(runtime_driver);
 
     let initial_m0_firmware = runtime_driver.detect_m0_firmware_before_stream(900);
     let m0_start = embassy_time::Instant::now();

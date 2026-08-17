@@ -6,14 +6,8 @@ use crate::{
     sys::{led, midi::MidiPort},
 };
 
-use super::SysExHandler;
-
-pub struct Handler;
-
-impl SysExHandler for Handler {
-    fn execute(_app: AppId, _port: MidiPort, data: &[u8]) -> bool {
-        handle(data, |index, r, g, b| led::set_rgb(index, r, g, b))
-    }
+pub fn execute(_app: AppId, _port: MidiPort, data: &[u8]) -> bool {
+    handle(data, |index, r, g, b| led::set_rgb(index, r, g, b))
 }
 
 pub fn handle(data: &[u8], mut set_led: impl FnMut(u8, u8, u8, u8)) -> bool {
@@ -71,6 +65,14 @@ fn set_target(target: u8, r: u8, g: u8, b: u8, set_led: &mut impl FnMut(u8, u8, 
                 set_led(index, r, g, b);
             }
         }
+        #[cfg(feature = "launchpad-pro-mk3")]
+        1..=8 => {
+            crate::driver::set_rgb_led(100 + target, r, g, b);
+            set_led(target, r, g, b);
+        }
+        #[cfg(feature = "launchpad-pro-mk3")]
+        9..=99 => set_led(target, r, g, b),
+        #[cfg(not(feature = "launchpad-pro-mk3"))]
         1..=99 => set_led(target, r, g, b),
         100..=109 => {
             let start = (target - 100) * 10 + 1;

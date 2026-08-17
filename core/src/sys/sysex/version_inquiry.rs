@@ -4,10 +4,6 @@
 use crate::app::AppId;
 use crate::sys::midi::MidiPort;
 
-use super::SysExHandler;
-
-pub struct Handler;
-
 const fn parse_u8(s: &str) -> u8 {
     let bytes = s.as_bytes();
     let mut val = 0;
@@ -22,34 +18,32 @@ const fn parse_u8(s: &str) -> u8 {
     val
 }
 
-impl SysExHandler for Handler {
-    fn execute(_app: AppId, port: MidiPort, data: &[u8]) -> bool {
-        if data.starts_with(&[0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x00]) {
-            const MAJOR: u8 = parse_u8(env!("CARGO_PKG_VERSION_MAJOR"));
-            const MINOR: u8 = parse_u8(env!("CARGO_PKG_VERSION_MINOR"));
-            const PATCH: u8 = parse_u8(env!("CARGO_PKG_VERSION_PATCH"));
+pub fn execute(_app: AppId, port: MidiPort, data: &[u8]) -> bool {
+    if data.starts_with(&[0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x00]) {
+        const MAJOR: u8 = parse_u8(env!("CARGO_PKG_VERSION_MAJOR"));
+        const MINOR: u8 = parse_u8(env!("CARGO_PKG_VERSION_MINOR"));
+        const PATCH: u8 = parse_u8(env!("CARGO_PKG_VERSION_PATCH"));
 
-            let device_id = crate::driver::device_id();
+        let device_id = crate::driver::device_id();
 
-            let resp = [
-                0xf0,
-                0x00,
-                0x20,
-                0x29,
-                0x02,
-                0x7f,
-                0x01,
-                device_id,
-                MAJOR & 0x7f,
-                MINOR & 0x7f,
-                PATCH & 0x7f,
-                0xf7,
-            ];
+        let resp = [
+            0xf0,
+            0x00,
+            0x20,
+            0x29,
+            0x02,
+            0x7f,
+            0x01,
+            device_id,
+            MAJOR & 0x7f,
+            MINOR & 0x7f,
+            PATCH & 0x7f,
+            0xf7,
+        ];
 
-            crate::driver::send_midi(port, &resp);
-            true
-        } else {
-            false
-        }
+        crate::driver::send_midi(port, &resp);
+        true
+    } else {
+        false
     }
 }

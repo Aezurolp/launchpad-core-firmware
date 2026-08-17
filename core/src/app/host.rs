@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use core::marker::PhantomData;
-
 use crate::app::boot::BootApp;
 use crate::app::palette_editor::PaletteEditorApp;
 use crate::app::performance::PerformanceApp;
@@ -14,14 +12,15 @@ use crate::sys::midi::MidiPort;
 use crate::sys::rotation;
 #[cfg(not(feature = "no-setup-btn"))]
 use crate::sys::settings;
-use crate::sys::sysex::{DefaultSysExHandler, SysExHandler, modes};
+use crate::sys::sysex::{self, modes};
+
 const SETUP_HOLD_TICKS: u16 = 500;
 #[cfg(feature = "no-setup-btn")]
 const SETUP_HOLD_BUTTON_INDEX: u8 = 95;
 #[cfg(not(feature = "no-setup-btn"))]
 const SETUP_BUTTON_INDEX: u8 = 0;
 
-pub struct AppHost<Sysex: SysExHandler = DefaultSysExHandler> {
+pub struct AppHost {
     pub current: AppId,
     previous_app: AppId,
     boot: BootApp,
@@ -37,10 +36,9 @@ pub struct AppHost<Sysex: SysExHandler = DefaultSysExHandler> {
     setup_button_ticks: u16,
     #[cfg(not(feature = "no-setup-btn"))]
     setup_button_active: bool,
-    sysex: PhantomData<Sysex>,
 }
 
-impl<Sysex: SysExHandler> AppHost<Sysex> {
+impl AppHost {
     pub const fn new(current: AppId) -> Self {
         Self {
             current,
@@ -58,7 +56,6 @@ impl<Sysex: SysExHandler> AppHost<Sysex> {
             setup_button_ticks: 0,
             #[cfg(not(feature = "no-setup-btn"))]
             setup_button_active: false,
-            sysex: PhantomData,
         }
     }
 
@@ -161,8 +158,8 @@ impl<Sysex: SysExHandler> AppHost<Sysex> {
             return;
         }
 
-        Sysex::execute(self.current, port, data);
-        if let Some(app) = Sysex::take_requested_app_switch() {
+        sysex::execute(self.current, port, data);
+        if let Some(app) = sysex::take_requested_app_switch() {
             self.switch(app);
         }
     }

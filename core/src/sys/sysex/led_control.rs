@@ -1,12 +1,85 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-pub trait LedTarget {
-    fn set_palette(&mut self, index: u8, velocity: u8);
-    fn set_rgb(&mut self, index: u8, r: u8, g: u8, b: u8);
+use crate::app::AppId;
+use crate::sys::midi::MidiPort;
+
+#[cfg(feature = "launchpad-mini-mk3")]
+const MODERN_DEVICE_ID: u8 = 0x0d;
+
+#[cfg(feature = "launchpad-x")]
+const MODERN_DEVICE_ID: u8 = 0x0c;
+
+#[cfg(feature = "launchpad-pro-mk3")]
+const MODERN_DEVICE_ID: u8 = 0x0e;
+
+#[cfg(feature = "launchpad-mk2")]
+const LEGACY_DEVICE_ID: u8 = 0x18;
+#[cfg(feature = "launchpad-mk2")]
+const LEGACY_MAX_LED_INDEX: u8 = 111;
+
+#[cfg(feature = "launchpad-pro")]
+const LEGACY_DEVICE_ID: u8 = 0x10;
+#[cfg(feature = "launchpad-pro")]
+const LEGACY_MAX_LED_INDEX: u8 = 99;
+
+#[cfg(feature = "launchpad-mk2")]
+fn map_grid(row: u8, col: u8) -> Option<u8> {
+    if row > 8 || col > 8 {
+        return None;
+    }
+
+    if row < 8 && col < 8 {
+        Some((row + 1) * 10 + (col + 1))
+    } else if row == 8 && col < 8 {
+        Some(104 + col)
+    } else if col == 8 && row < 8 {
+        Some((row + 1) * 10 + 9)
+    } else {
+        None
+    }
 }
 
-pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) -> bool {
+#[cfg(feature = "launchpad-pro")]
+fn map_grid(row: u8, col: u8) -> Option<u8> {
+    if row > 9 || col > 9 {
+        return None;
+    }
+    if (row == 0 || row == 9) && (col == 0 || col == 9) {
+        return None;
+    }
+
+    Some(row * 10 + col)
+}
+
+pub fn execute(_app: AppId, _port: MidiPort, _data: &[u8]) -> bool {
+    #[cfg(any(
+        feature = "launchpad-mini-mk3",
+        feature = "launchpad-x",
+        feature = "launchpad-pro-mk3"
+    ))]
+    {
+        if handle_modern(_data, MODERN_DEVICE_ID) {
+            return true;
+        }
+    }
+
+    #[cfg(any(feature = "launchpad-mk2", feature = "launchpad-pro"))]
+    {
+        if handle_legacy(_data, LEGACY_DEVICE_ID, map_grid, LEGACY_MAX_LED_INDEX) {
+            return true;
+        }
+    }
+
+    false
+}
+
+#[cfg(any(
+    feature = "launchpad-mini-mk3",
+    feature = "launchpad-x",
+    feature = "launchpad-pro-mk3"
+))]
+pub fn handle_modern(data: &[u8], device_id: u8) -> bool {
     if data.len() < 8 || data[0] != 0xf0 || data.last() != Some(&0xf7) {
         return false;
     }
@@ -33,7 +106,7 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
                 if index >= data.len() - 1 {
                     break;
                 }
-                target.set_palette(led_index, data[index]);
+                crate::sys::led::set_palette(led_index, data[index]);
                 index += 1;
             }
 
@@ -59,7 +132,7 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
                 let g = data[index + 1] & 0x3f;
                 let b = data[index + 2] & 0x3f;
                 index += 3;
-                target.set_rgb(led_index, r, g, b);
+                crate::sys::led::set_rgb(led_index, r, g, b);
             }
 
             _ => break,
@@ -69,6 +142,7 @@ pub fn handle_modern(data: &[u8], device_id: u8, target: &mut impl LedTarget) ->
     true
 }
 
+#[cfg(any(feature = "launchpad-mk2", feature = "launchpad-pro"))]
 pub fn handle_legacy(
     data: &[u8],
     device_id: u8,
@@ -199,4 +273,3 @@ pub fn handle_legacy(
         _ => true,
     }
 }
-

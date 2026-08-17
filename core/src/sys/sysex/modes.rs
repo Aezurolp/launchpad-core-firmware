@@ -4,14 +4,8 @@
 use crate::app::AppId;
 use crate::sys::midi::MidiPort;
 
-use super::SysExHandler;
-
-pub struct Handler;
-
-impl SysExHandler for Handler {
-    fn execute(_app: AppId, _port: MidiPort, data: &[u8]) -> bool {
-        switch_target(data).is_some()
-    }
+pub fn execute(_app: AppId, _port: MidiPort, data: &[u8]) -> bool {
+    switch_target(data).is_some()
 }
 
 pub fn switch_target(data: &[u8]) -> Option<AppId> {

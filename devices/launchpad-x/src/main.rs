@@ -11,7 +11,6 @@ pub mod inputs;
 pub mod led_scan;
 pub mod leds;
 pub mod runtime;
-pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
@@ -25,7 +24,7 @@ use firmware_core::sys::settings;
 use panic_halt as _;
 use static_cell::StaticCell;
 
-type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {

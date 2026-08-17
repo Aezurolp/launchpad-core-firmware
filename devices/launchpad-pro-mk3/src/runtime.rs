@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use core::cell::UnsafeCell;
 use embassy_embedded_hal::SetConfig;
 use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
 use embassy_stm32::mode::Blocking;
@@ -11,7 +10,7 @@ use embassy_stm32::Peri;
 use embedded_hal_nb::nb;
 use embedded_hal_nb::serial::Read;
 
-use crate::extflash::{ExtFlash, ExtFlashInfo};
+use crate::extflash::ExtFlash;
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use firmware_core::app::SurfaceEvent;
 use firmware_core::driver::Driver;
@@ -91,7 +90,6 @@ const SCB_DCIMVAC: *mut u32 = 0xE000_EF5C as *mut u32;
 const SCB_DCCIMVAC: *mut u32 = 0xE000_EF70 as *mut u32;
 const DCACHE_LINE_BYTES: usize = 32;
 pub const M0_ROM_STATUS_OK: u8 = 0;
-pub const M0_ROM_STATUS_INIT: u8 = 1;
 pub const M0_ROM_STATUS_SYNC: u8 = 2;
 pub const M0_ROM_STATUS_CMD: u8 = 3;
 pub const M0_ROM_STATUS_NACK: u8 = 4;
@@ -120,32 +118,7 @@ const ROADRUNNER_STATS_INQUIRY: [u8; 5] =
     [ROADRUNNER_STATS_OPCODE, ROADRUNNER_STATS_SCHEMA, 0, 0, 0];
 const ROADRUNNER_STATS_RESPONSE_LEN: usize = 14;
 
-#[derive(Clone, Copy)]
-pub struct M0ProbeResult {
-    pub status: u8,
-    pub read_status: u8,
-    pub ack: u8,
-    pub baud: u32,
-    pub pid: u16,
-    pub blid: u8,
-    pub vector: [u8; 16],
-    pub vector_len: u8,
-}
-
-impl M0ProbeResult {
-    pub const fn new() -> Self {
-        Self {
-            status: M0_ROM_STATUS_INIT,
-            read_status: M0_ROM_STATUS_RX,
-            ack: 0,
-            baud: 0,
-            pid: 0,
-            blid: 0xff,
-            vector: [0; 16],
-            vector_len: 0,
-        }
-    }
-}
+pub use firmware_core::driver::{FlashInfo, M0FirmwareStatus, M0ProbeResult, RoadrunnerStats};
 
 #[derive(Clone, Copy)]
 pub struct M0LinkStatus {
@@ -154,36 +127,6 @@ pub struct M0LinkStatus {
     pub stream_synced: bool,
     pub ever_synced: bool,
     pub active_baud: u32,
-}
-
-#[derive(Clone, Copy)]
-pub struct M0FirmwareStatus {
-    pub status: u8,
-    pub kind: u8,
-    pub version_major: u8,
-    pub version_minor: u8,
-    pub version_patch: u8,
-    pub probe: M0ProbeResult,
-}
-
-impl M0FirmwareStatus {
-    pub const fn unknown() -> Self {
-        Self {
-            status: M0_ROM_STATUS_INIT,
-            kind: M0_FW_UNKNOWN,
-            version_major: 0,
-            version_minor: 0,
-            version_patch: 0,
-            probe: M0ProbeResult::new(),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct RoadrunnerStats {
-    pub fast_frames: u32,
-    pub commits: u32,
-    pub rx_overruns: u32,
 }
 
 #[repr(align(32))]
@@ -197,47 +140,6 @@ impl M0ButtonFrame {
             bytes: [0; M0_BTN_FRAME_DMA_SIZE],
         }
     }
-}
-
-struct RuntimeSlot {
-    ptr: UnsafeCell<Option<*mut RuntimeDriver>>,
-}
-
-unsafe impl Sync for RuntimeSlot {}
-
-impl RuntimeSlot {
-    const fn new() -> Self {
-        Self {
-            ptr: UnsafeCell::new(None),
-        }
-    }
-
-    fn install(&self, driver: &mut RuntimeDriver) {
-        unsafe {
-            *self.ptr.get() = Some(driver as *mut RuntimeDriver);
-        }
-    }
-
-    fn with<R>(&self, f: impl FnOnce(&mut RuntimeDriver) -> R) -> Option<R> {
-        unsafe {
-            let slot = &mut *self.ptr.get();
-            slot.as_mut().map(|ptr| f(&mut **ptr))
-        }
-    }
-}
-
-static RUNTIME: RuntimeSlot = RuntimeSlot::new();
-
-pub fn install_runtime(driver: &mut RuntimeDriver) {
-    RUNTIME.install(driver);
-}
-
-pub fn with_m0<R>(f: impl FnOnce(&mut M0Link) -> R) -> Option<R> {
-    RUNTIME.with(|driver| f(&mut driver.link))
-}
-
-pub fn with_runtime<R>(f: impl FnOnce(&mut RuntimeDriver) -> R) -> Option<R> {
-    RUNTIME.with(f)
 }
 
 pub struct RuntimeDriver {
@@ -295,10 +197,6 @@ impl RuntimeDriver {
         status
     }
 
-    pub fn cached_m0_firmware_status(&self) -> M0FirmwareStatus {
-        self.m0_firmware_status
-    }
-
     fn apply_m0_firmware_status(&mut self, status: &M0FirmwareStatus) {
         self.m0_firmware_status = *status;
         match status.kind {
@@ -316,14 +214,6 @@ impl RuntimeDriver {
                 }
             }
         }
-    }
-
-    pub fn flash_info(&mut self) -> ExtFlashInfo {
-        self.flash.info()
-    }
-
-    pub fn roadrunner_stats(&mut self) -> Option<RoadrunnerStats> {
-        self.link.roadrunner_stats_inquiry(100)
     }
 }
 
@@ -371,6 +261,63 @@ impl Driver for RuntimeDriver {
     }
     fn device_id(&self) -> u8 {
         35
+    }
+
+    fn cached_m0_firmware_status(&mut self) -> Option<M0FirmwareStatus> {
+        Some(self.m0_firmware_status)
+    }
+
+    fn refresh_m0_firmware_status(&mut self) -> Option<M0FirmwareStatus> {
+        Some(self.refresh_m0_firmware_status())
+    }
+
+    fn flash_info(&mut self) -> Option<FlashInfo> {
+        let info = self.flash.info();
+        Some(FlashInfo {
+            present: info.present,
+            jedec_id: info.jedec_id,
+            status1: info.status1,
+        })
+    }
+
+    fn roadrunner_stats(&mut self) -> Option<Option<RoadrunnerStats>> {
+        Some(self.link.roadrunner_stats_inquiry(100))
+    }
+
+    fn m0_force_rom_probe(&mut self) -> u8 {
+        let probe = self.link.force_rom_probe();
+        if probe.status != M0_ROM_STATUS_OK {
+            return probe.status;
+        }
+        self.link.rom_mass_erase()
+    }
+
+    fn m0_rom_mass_erase(&mut self) -> u8 {
+        self.link.rom_mass_erase()
+    }
+
+    fn m0_rom_probe(&mut self) -> u8 {
+        self.link.rom_probe().status
+    }
+
+    fn m0_rom_write(&mut self, addr: u32, data: &[u8]) -> u8 {
+        let probe = self.link.rom_probe();
+        if probe.status != M0_ROM_STATUS_OK {
+            return probe.status;
+        }
+        self.link.rom_write(addr, data)
+    }
+
+    fn m0_rom_read(&mut self, addr: u32, data: &mut [u8]) -> u8 {
+        let probe = self.link.rom_probe();
+        if probe.status != M0_ROM_STATUS_OK {
+            return probe.status;
+        }
+        self.link.rom_read(addr, data)
+    }
+
+    fn m0_set_mode(&mut self, mode: u8) {
+        let _ = self.link.set_mode(mode);
     }
 }
 

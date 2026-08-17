@@ -9,7 +9,6 @@ pub mod grid;
 pub mod inputs;
 pub mod leds;
 pub mod runtime;
-pub mod sysex;
 pub mod usb;
 
 use embassy_executor::Spawner;
@@ -29,7 +28,7 @@ use stm32_metapac as pac;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_6400;
 
-type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost>;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
