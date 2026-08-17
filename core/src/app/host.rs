@@ -10,14 +10,13 @@ use crate::app::setup::SetupApp;
 use crate::app::{AftertouchEvent, App, AppId, MidiEvent, SurfaceEvent};
 use crate::sys::led;
 use crate::sys::midi::MidiPort;
+use crate::sys::rotation;
 #[cfg(not(feature = "no-setup-btn"))]
 use crate::sys::settings;
 use crate::sys::sysex::{DefaultSysExHandler, SysExHandler, modes};
-
+const SETUP_HOLD_TICKS: u16 = 500;
 #[cfg(feature = "no-setup-btn")]
 const SETUP_HOLD_BUTTON_INDEX: u8 = 95;
-#[cfg(feature = "no-setup-btn")]
-const SETUP_HOLD_TICKS: u16 = 500;
 #[cfg(not(feature = "no-setup-btn"))]
 const SETUP_BUTTON_INDEX: u8 = 0;
 
@@ -34,6 +33,10 @@ pub struct AppHost<BootApp: App, LiveApp: App, Sysex: SysExHandler = DefaultSysE
     setup_hold_ticks: u16,
     #[cfg(feature = "no-setup-btn")]
     setup_hold_active: bool,
+    #[cfg(not(feature = "no-setup-btn"))]
+    setup_button_ticks: u16,
+    #[cfg(not(feature = "no-setup-btn"))]
+    setup_button_active: bool,
     sysex: PhantomData<Sysex>,
 }
 
@@ -52,6 +55,10 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
             setup_hold_ticks: 0,
             #[cfg(feature = "no-setup-btn")]
             setup_hold_active: false,
+            #[cfg(not(feature = "no-setup-btn"))]
+            setup_button_ticks: 0,
+            #[cfg(not(feature = "no-setup-btn"))]
+            setup_button_active: false,
             sysex: PhantomData,
         }
     }
@@ -96,7 +103,11 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
 
     pub fn route_surface_event(&mut self, event: SurfaceEvent) {
         if event.index != 0 {
-            self.active_app_mut().on_surface(event);
+            let mut canonical_event = event;
+            canonical_event.index = self.to_canonical_index(event.index);
+
+            self.active_app_mut().on_surface(canonical_event);
+            self.active_app_mut().on_surface_raw(event);
         }
 
         #[cfg(feature = "no-setup-btn")]
@@ -110,6 +121,15 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
         }
 
         self.apply_requested_app_switch();
+    }
+
+    // Only rotates the main grid in setup mode, every other app rotates.
+    fn to_canonical_index(&self, raw_index: u8) -> u8 {
+        if self.current == AppId::Setup {
+            rotation::to_canonical_grid_only(raw_index)
+        } else {
+            rotation::to_canonical(raw_index)
+        }
     }
 
     pub fn route_midi_event(&mut self, event: MidiEvent) {
@@ -130,7 +150,10 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
     }
 
     pub fn route_aftertouch_event(&mut self, event: AftertouchEvent) {
-        self.active_app_mut().on_aftertouch(event);
+        let mut canonical_event = event;
+        canonical_event.index = self.to_canonical_index(event.index);
+
+        self.active_app_mut().on_aftertouch(canonical_event);
         self.apply_requested_app_switch();
     }
 
@@ -153,6 +176,9 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
     pub fn route_tick_event(&mut self) {
         #[cfg(feature = "no-setup-btn")]
         self.tick_setup_hold_button();
+
+        #[cfg(not(feature = "no-setup-btn"))]
+        self.tick_setup_button();
 
         led::tick();
         self.active_app_mut().on_tick();
@@ -233,16 +259,38 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
 
         if event.pressed {
             if self.current == AppId::Setup {
+                self.setup_button_active = false;
+                self.setup_button_ticks = 0;
                 self.exit_setup();
             } else if self.current == AppId::PaletteEditor {
+                self.setup_button_active = false;
+                self.setup_button_ticks = 0;
+                led::clear();
                 settings::save();
                 self.switch(AppId::Setup);
             } else {
+                self.setup_button_ticks = 0;
+                self.setup_button_active = true;
                 self.switch(AppId::Setup);
             }
+        } else {
+            let was_active = self.setup_button_active;
+            self.setup_button_active = false;
+
+            if was_active && self.setup_button_ticks >= SETUP_HOLD_TICKS {
+                self.exit_setup();
+            }
+            self.setup_button_ticks = 0;
         }
 
         true
+    }
+
+    #[cfg(not(feature = "no-setup-btn"))]
+    fn tick_setup_button(&mut self) {
+        if self.setup_button_active {
+            self.setup_button_ticks = self.setup_button_ticks.saturating_add(1);
+        }
     }
 
     #[cfg(feature = "no-setup-btn")]
@@ -257,13 +305,11 @@ impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, 
             self.setup_hold_active = false;
             self.setup_hold_ticks = 0;
 
-            self.route_surface_event(
-                SurfaceEvent {
-                    pressed: false,
-                    index: 95,
-                    value: 0
-                }
-            );
+            self.route_surface_event(SurfaceEvent {
+                pressed: false,
+                index: 95,
+                value: 0,
+            });
 
             self.switch(AppId::Setup);
         }

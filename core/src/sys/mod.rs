@@ -3,5 +3,6 @@
 
 pub mod led;
 pub mod midi;
+pub mod rotation;
 pub mod settings;
 pub mod sysex;

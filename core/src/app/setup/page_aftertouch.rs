@@ -78,7 +78,7 @@ impl AftertouchPage {
 
 impl Page for AftertouchPage {
     fn on_enter(&mut self) {
-        led::set(59, 0x150055);
+        led::set_raw(59, 0x150055);
         self.text.draw();
         self.draw();
     }

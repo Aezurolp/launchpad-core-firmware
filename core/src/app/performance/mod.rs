@@ -6,6 +6,8 @@ use crate::app::events::{AftertouchEvent, MidiEvent, SurfaceEvent};
 use crate::driver;
 use crate::sys::led;
 use crate::sys::midi::MidiPort;
+#[cfg(feature = "launchpad-pro-mk3")]
+use crate::sys::rotation;
 use crate::sys::settings;
 use crate::utils::layout;
 
@@ -26,7 +28,7 @@ impl App for PerformanceApp {
         #[cfg(feature = "launchpad-pro-mk3")]
         let index =
             if settings::with(|s| s.mirror_enabled) != 0 && (100..=110).contains(&event.index) {
-                event.index - 100
+                rotation::to_canonical(event.index - 100)
             } else {
                 event.index
             };
@@ -82,8 +84,11 @@ impl App for PerformanceApp {
                 if channel_match && led_index != 0 {
                     led::set_palette(led_index, event.data2);
                     #[cfg(feature = "launchpad-pro-mk3")]
-                    if settings::with(|s| s.mirror_enabled) != 0 && led_index <= 10 {
-                        led::set_palette(led_index + 100, event.data2);
+                    if settings::with(|s| s.mirror_enabled) != 0 {
+                        let raw_led = rotation::to_raw(led_index);
+                        if (1..=8).contains(&raw_led) {
+                            led::set_palette_raw(raw_led + 100, event.data2);
+                        }
                     }
                 }
             }
@@ -91,8 +96,11 @@ impl App for PerformanceApp {
                 if channel_match && led_index != 0 {
                     led::set_palette(led_index, 0);
                     #[cfg(feature = "launchpad-pro-mk3")]
-                    if settings::with(|s| s.mirror_enabled) != 0 && led_index <= 10 {
-                        led::set_palette(led_index + 100, 0);
+                    if settings::with(|s| s.mirror_enabled) != 0 {
+                        let raw_led = rotation::to_raw(led_index);
+                        if (1..=8).contains(&raw_led) {
+                            led::set_palette_raw(raw_led + 100, 0);
+                        }
                     }
                 }
             }
@@ -122,7 +130,7 @@ impl App for PerformanceApp {
         #[cfg(feature = "launchpad-pro-mk3")]
         let index =
             if settings::with(|s| s.mirror_enabled) != 0 && (100..=110).contains(&event.index) {
-                event.index - 100
+                rotation::to_canonical(event.index - 100)
             } else {
                 event.index
             };

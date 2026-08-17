@@ -144,6 +144,8 @@ After the flashing is complete, the Launchpad will automatically reboot into nor
 
 [zeph](https://github.com/ZephyrCodesStuff) - Low-level performance optimizations, improving code soundness and maintainability, refactoring
 
+[Aezuro](https://github.com/Aezurolp) - Added rotation and setup button hold feature.
+
 ## License
 
 CoreFW is licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
