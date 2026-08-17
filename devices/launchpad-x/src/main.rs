@@ -5,7 +5,6 @@
 #![no_std]
 #![no_main]
 
-pub mod app;
 pub mod extflash;
 pub mod grid;
 pub mod inputs;
@@ -26,8 +25,7 @@ use firmware_core::sys::settings;
 use panic_halt as _;
 use static_cell::StaticCell;
 
-type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -71,10 +69,7 @@ async fn main(spawner: Spawner) {
     driver::install(runtime_driver);
     settings::load();
 
-    let app_host = APP_HOST.init(Mutex::new(AppHost::new(
-        AppId::Boot,
-        app::live::new(),
-    )));
+    let app_host = APP_HOST.init(Mutex::new(AppHost::new(AppId::Boot)));
     app_host.lock().await.init();
 
     led_scan::start(grid);

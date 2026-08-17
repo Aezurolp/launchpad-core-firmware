@@ -21,7 +21,7 @@ pub enum AppId {
     Boot,
     Setup,
     Performance,
-    Live,
     Programmer,
     PaletteEditor,
 }
+

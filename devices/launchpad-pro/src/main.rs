@@ -4,7 +4,6 @@
 #![no_std]
 #![no_main]
 
-pub mod app;
 pub mod flash;
 pub mod grid;
 pub mod inputs;
@@ -30,8 +29,7 @@ use stm32_metapac as pac;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_6400;
 
-type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -81,10 +79,7 @@ async fn main(_spawner: Spawner) {
     driver::install(runtime_driver);
     settings::load();
 
-    let app_host = APP_HOST.init(Mutex::new(AppHost::new(
-        AppId::Boot,
-        app::live::new(),
-    )));
+    let app_host = APP_HOST.init(Mutex::new(AppHost::new(AppId::Boot)));
     app_host.lock().await.init();
     leds::start_scan(grid as *mut grid::Grid);
     grid.start_adc_scan();

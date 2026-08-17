@@ -21,11 +21,10 @@ const SETUP_HOLD_BUTTON_INDEX: u8 = 95;
 #[cfg(not(feature = "no-setup-btn"))]
 const SETUP_BUTTON_INDEX: u8 = 0;
 
-pub struct AppHost<LiveApp: App, Sysex: SysExHandler = DefaultSysExHandler> {
+pub struct AppHost<Sysex: SysExHandler = DefaultSysExHandler> {
     pub current: AppId,
     previous_app: AppId,
     boot: BootApp,
-    live: LiveApp,
     setup: SetupApp,
     performance: PerformanceApp,
     programmer: ProgrammerApp,
@@ -41,12 +40,11 @@ pub struct AppHost<LiveApp: App, Sysex: SysExHandler = DefaultSysExHandler> {
     sysex: PhantomData<Sysex>,
 }
 
-impl<LiveApp: App, Sysex: SysExHandler> AppHost<LiveApp, Sysex> {
-    pub const fn new(current: AppId, live: LiveApp) -> Self {
+impl<Sysex: SysExHandler> AppHost<Sysex> {
+    pub const fn new(current: AppId) -> Self {
         Self {
             current,
             boot: BootApp::new(),
-            live,
             setup: SetupApp::new(),
             performance: PerformanceApp::new(),
             programmer: ProgrammerApp::new(),
@@ -69,7 +67,6 @@ impl<LiveApp: App, Sysex: SysExHandler> AppHost<LiveApp, Sysex> {
             AppId::Boot => &mut self.boot,
             AppId::Setup => &mut self.setup,
             AppId::Performance => &mut self.performance,
-            AppId::Live => &mut self.live,
             AppId::Programmer => &mut self.programmer,
             AppId::PaletteEditor => &mut self.palette_editor,
         }
@@ -135,10 +132,6 @@ impl<LiveApp: App, Sysex: SysExHandler> AppHost<LiveApp, Sysex> {
 
     pub fn route_midi_event(&mut self, event: MidiEvent) {
         if event.port == MidiPort::Daw {
-            if self.current == AppId::Live {
-                self.live.on_midi(event);
-                self.apply_requested_app_switch();
-            }
             return;
         }
 

@@ -4,7 +4,6 @@
 #![no_std]
 #![no_main]
 
-pub mod app;
 pub mod buttons;
 pub mod extflash;
 pub mod grid;
@@ -25,8 +24,7 @@ use firmware_core::sys::settings;
 use panic_halt as _;
 use static_cell::StaticCell;
 
-type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -74,10 +72,7 @@ async fn main(_spawner: Spawner) {
     driver::install(runtime_driver);
     settings::load();
 
-    let app_host = APP_HOST.init(Mutex::new(AppHost::new(
-        AppId::Boot,
-        app::live::new(),
-    )));
+    let app_host = APP_HOST.init(Mutex::new(AppHost::new(AppId::Boot)));
     let mut prev_pressed = [false; 100];
     app_host.lock().await.init();
 

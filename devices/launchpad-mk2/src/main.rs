@@ -4,7 +4,6 @@
 #![no_std]
 #![no_main]
 
-pub mod app;
 pub mod flash;
 pub mod grid;
 pub mod inputs;
@@ -28,8 +27,7 @@ use static_cell::StaticCell;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_3400;
 
-type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
+type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost<sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -73,10 +71,7 @@ async fn main(spawner: Spawner) {
     driver::install(runtime_driver);
     settings::load();
 
-    let app_host = APP_HOST.init(Mutex::new(AppHost::new(
-        AppId::Boot,
-        app::live::new(),
-    )));
+    let app_host = APP_HOST.init(Mutex::new(AppHost::new(AppId::Boot)));
     app_host.lock().await.init();
     leds::start_scan(grid as *mut grid::Grid);
     surface::spawn(&spawner, grid as *mut grid::Grid);
