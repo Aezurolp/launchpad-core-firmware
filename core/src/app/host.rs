@@ -3,6 +3,7 @@
 
 use core::marker::PhantomData;
 
+use crate::app::boot::BootApp;
 use crate::app::palette_editor::PaletteEditorApp;
 use crate::app::performance::PerformanceApp;
 use crate::app::programmer::ProgrammerApp;
@@ -20,7 +21,7 @@ const SETUP_HOLD_BUTTON_INDEX: u8 = 95;
 #[cfg(not(feature = "no-setup-btn"))]
 const SETUP_BUTTON_INDEX: u8 = 0;
 
-pub struct AppHost<BootApp: App, LiveApp: App, Sysex: SysExHandler = DefaultSysExHandler> {
+pub struct AppHost<LiveApp: App, Sysex: SysExHandler = DefaultSysExHandler> {
     pub current: AppId,
     previous_app: AppId,
     boot: BootApp,
@@ -40,11 +41,11 @@ pub struct AppHost<BootApp: App, LiveApp: App, Sysex: SysExHandler = DefaultSysE
     sysex: PhantomData<Sysex>,
 }
 
-impl<BootApp: App, LiveApp: App, Sysex: SysExHandler> AppHost<BootApp, LiveApp, Sysex> {
-    pub const fn new(current: AppId, boot: BootApp, live: LiveApp) -> Self {
+impl<LiveApp: App, Sysex: SysExHandler> AppHost<LiveApp, Sysex> {
+    pub const fn new(current: AppId, live: LiveApp) -> Self {
         Self {
             current,
-            boot,
+            boot: BootApp::new(),
             live,
             setup: SetupApp::new(),
             performance: PerformanceApp::new(),

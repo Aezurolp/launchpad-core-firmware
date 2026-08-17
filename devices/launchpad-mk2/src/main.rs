@@ -5,7 +5,6 @@
 #![no_main]
 
 pub mod app;
-pub mod boot;
 pub mod flash;
 pub mod grid;
 pub mod inputs;
@@ -30,7 +29,7 @@ use static_cell::StaticCell;
 const APP_VECTOR_TABLE: u32 = 0x0800_3400;
 
 type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<boot::BootApp, app::live::LiveApp, sysex::Handler>>;
+    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -76,7 +75,6 @@ async fn main(spawner: Spawner) {
 
     let app_host = APP_HOST.init(Mutex::new(AppHost::new(
         AppId::Boot,
-        boot::new(),
         app::live::new(),
     )));
     app_host.lock().await.init();

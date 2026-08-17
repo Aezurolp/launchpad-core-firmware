@@ -12,7 +12,7 @@ pub mod setup;
 
 pub use crate::sys::midi::MidiPort;
 pub use apptrait::App;
-pub use boot::{BootAnimation, BootAnimationApp, BootChange, BootFrame};
+pub use boot::{BootAnimation, BootAnimationApp, BootApp, BootChange, BootFrame};
 pub use events::{AftertouchEvent, MidiEvent, SurfaceEvent};
 pub use host::AppHost;
 

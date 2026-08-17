@@ -5,7 +5,6 @@
 #![no_main]
 
 mod app;
-mod boot;
 mod hw;
 mod runtime;
 mod surface;
@@ -19,7 +18,7 @@ use runtime::RuntimeDriver;
 use stm32_metapac as _;
 use surface::Surface;
 
-type LaunchpadRgAppHost = AppHost<boot::BootApp, app::LiveApp>;
+type LaunchpadRgAppHost = AppHost<app::LiveApp>;
 
 #[entry]
 fn main() -> ! {
@@ -45,7 +44,7 @@ fn main() -> ! {
     static mut SURFACE: Surface = Surface::new();
     static mut RUNTIME: RuntimeDriver = RuntimeDriver::new(core::ptr::null_mut());
     static mut APP_HOST: LaunchpadRgAppHost =
-        AppHost::new(AppId::Performance, boot::BootApp::new(), app::LiveApp::new());
+        AppHost::new(AppId::Boot, app::LiveApp::new());
 
     let surface = unsafe { &mut *core::ptr::addr_of_mut!(SURFACE) };
     surface.init();

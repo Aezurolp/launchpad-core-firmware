@@ -6,7 +6,6 @@
 #![no_main]
 
 pub mod app;
-pub mod boot;
 pub mod extflash;
 pub mod grid;
 pub mod inputs;
@@ -28,7 +27,7 @@ use panic_halt as _;
 use static_cell::StaticCell;
 
 type SharedAppHost =
-    Mutex<CriticalSectionRawMutex, AppHost<boot::BootApp, app::live::LiveApp, sysex::Handler>>;
+    Mutex<CriticalSectionRawMutex, AppHost<app::live::LiveApp, sysex::Handler>>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -74,7 +73,6 @@ async fn main(spawner: Spawner) {
 
     let app_host = APP_HOST.init(Mutex::new(AppHost::new(
         AppId::Boot,
-        boot::new(),
         app::live::new(),
     )));
     app_host.lock().await.init();

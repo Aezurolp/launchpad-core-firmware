@@ -5,7 +5,6 @@
 #![no_main]
 
 mod app;
-mod boot;
 pub mod extflash;
 pub mod led;
 mod map;
@@ -50,10 +49,9 @@ use firmware_core::sys::settings;
 use static_cell::StaticCell;
 
 use crate::app::LiveApp;
-use crate::boot::BootApp;
 use crate::runtime::RuntimeDriver;
 
-type AppHostType = AppHost<BootApp, LiveApp, sysex::Handler>;
+type AppHostType = AppHost<LiveApp, sysex::Handler>;
 static APP_HOST: StaticCell<
     embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::ThreadModeRawMutex, AppHostType>,
 > = StaticCell::new();
@@ -137,7 +135,7 @@ async fn main(spawner: Spawner) {
     let usb_driver = usb::make_driver(p.USB_OTG_FS, p.PA12, p.PA11);
     usb::spawn(&spawner, usb_driver);
 
-    let app_host = AppHost::new(AppId::Boot, boot::new(), LiveApp::new());
+    let app_host = AppHost::new(AppId::Boot, LiveApp::new());
     let app_host = APP_HOST.init(embassy_sync::mutex::Mutex::new(app_host));
 
     app_host.lock().await.init();
