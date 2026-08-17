@@ -3,6 +3,7 @@
 
 use crate::app::{AftertouchEvent, App, AppId, MidiEvent, SurfaceEvent};
 use crate::sys::led;
+use crate::utils::layout::dr_to_xy;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -129,7 +130,7 @@ impl App for BootApp {
 
                 let change = self.animation.changes[self.change_index];
                 self.change_index += 1;
-                led::novation(change.led, change.velocity);
+                led::novation(dr_to_xy(change.led), change.velocity);
             }
 
             self.frame_index += 1;

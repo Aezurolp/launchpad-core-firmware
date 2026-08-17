@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 ZephyrCodesStuff
+# Copyright (C) 2026 Anthony Hofmeister
 
 import sys
 import os
@@ -70,7 +71,9 @@ def parse_midi(midi_path):
     offset = 14
 
     events_by_tick = {}
-    max_tick = 0
+    current_tempo = 500000  # default 120 BPM (500,000 us/quarter note)
+    max_tick_ms = 0
+    end_of_track_ms = 0
 
     for _ in range(ntracks):
         if offset >= len(data):
@@ -79,14 +82,16 @@ def parse_midi(midi_path):
         offset += 8
         trk_end = offset + trk_len
 
-        abs_tick = 0
         running_status = None
+        current_time_us = 0
 
         while offset < trk_end and offset < len(data):
             delta, offset = read_vlq(data, offset)
-            abs_tick += delta
-            if abs_tick > max_tick:
-                max_tick = abs_tick
+            if division > 0:
+                current_time_us += (delta * current_tempo) // division
+            abs_tick_ms = round(current_time_us / 1000)
+            if abs_tick_ms > max_tick_ms:
+                max_tick_ms = abs_tick_ms
 
             status_byte = data[offset]
             if status_byte & 0x80:
@@ -105,17 +110,21 @@ def parse_midi(midi_path):
                 offset += 2
                 if event_type == 0x80:
                     vel = 0
-                if abs_tick not in events_by_tick:
-                    events_by_tick[abs_tick] = []
-                events_by_tick[abs_tick].append((note, vel))
+                if abs_tick_ms not in events_by_tick:
+                    events_by_tick[abs_tick_ms] = []
+                events_by_tick[abs_tick_ms].append((note, vel))
             elif event_type in (0xA0, 0xB0, 0xE0):
                 offset += 2
             elif event_type in (0xC0, 0xD0):
                 offset += 1
             elif status_byte == 0xFF:
-                _meta_type = data[offset]
+                meta_type = data[offset]
                 offset += 1
                 length, offset = read_vlq(data, offset)
+                if meta_type == 0x51 and length == 3:
+                    current_tempo = (data[offset] << 16) | (data[offset+1] << 8) | data[offset+2]
+                elif meta_type == 0x2F:
+                    end_of_track_ms = round(current_time_us / 1000)
                 offset += length
             elif status_byte in (0xF0, 0xF7):
                 length, offset = read_vlq(data, offset)
@@ -131,7 +140,8 @@ def parse_midi(midi_path):
         for note, vel in evs:
             changes.append((note, vel))
 
-    return max_tick, frames, changes
+    end_tick = end_of_track_ms if end_of_track_ms > max_tick_ms else (max_tick_ms + 500)
+    return end_tick, frames, changes
 
 def pack_bin(end_tick, frames, changes):
     buf = bytearray()
@@ -152,11 +162,12 @@ def unpack_midi(end_tick, frames, changes):
     track_bytes.extend(encode_vlq(0))
     track_bytes.extend(b'\xFF\x51\x03\x07\xA1\x20')
 
+    # division = 500 ticks/beat @ 500,000 us/beat => exactly 1 MIDI tick = 1 ms
     last_tick = 0
     change_idx = 0
 
     for frame_tick, count in frames:
-        delta_10ms = frame_tick - last_tick
+        delta_ms = frame_tick - last_tick
 
         for i in range(count):
             if change_idx >= len(changes):
@@ -164,7 +175,7 @@ def unpack_midi(end_tick, frames, changes):
             led, vel = changes[change_idx]
             change_idx += 1
 
-            dt = delta_10ms if i == 0 else 0
+            dt = delta_ms if i == 0 else 0
             track_bytes.extend(encode_vlq(dt))
 
             if vel > 0:
@@ -175,13 +186,16 @@ def unpack_midi(end_tick, frames, changes):
         last_tick = frame_tick
 
     # End of Track
-    track_bytes.extend(encode_vlq(0))
+    if end_tick > last_tick:
+        track_bytes.extend(encode_vlq(end_tick - last_tick))
+    else:
+        track_bytes.extend(encode_vlq(0))
     track_bytes.extend(b'\xFF\x2F\x00')
 
     # Build Header Chunk (MThd) & Track Chunk (MTrk)
     mid_file = bytearray()
     mid_file.extend(b'MThd')
-    mid_file.extend(struct.pack('>IHHH', 6, 0, 1, 100))
+    mid_file.extend(struct.pack('>IHHH', 6, 0, 1, 500))  # division=500 -> 1 tick = 1 ms
     mid_file.extend(b'MTrk')
     mid_file.extend(struct.pack('>I', len(track_bytes)))
     mid_file.extend(track_bytes)
