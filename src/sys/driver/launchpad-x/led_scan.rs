@@ -27,7 +27,10 @@ pub fn start(grid: *mut Grid) {
         pac::RCC.apb2enr().modify(|w| w.set_tim1en(true));
     });
 
-    pac::TIM1.cr1().modify(|w| w.set_cen(false));
+    pac::TIM1.cr1().modify(|w| {
+        w.set_cen(false);
+        w.set_arpe(false);
+    });
     pac::TIM1.psc().write(|w| *w = TIM1_PSC_1MHZ);
     pac::TIM1
         .arr()
@@ -42,7 +45,10 @@ pub fn start(grid: *mut Grid) {
         interrupt::TIM1_UP_TIM10.enable();
     }
 
-    pac::TIM1.cr1().modify(|w| w.set_cen(true));
+    pac::TIM1.cr1().modify(|w| {
+        w.set_arpe(false);
+        w.set_cen(true);
+    });
 }
 
 pub fn take_frame_complete() -> bool {
@@ -54,7 +60,8 @@ fn TIM1_UP_TIM10() {
     if !pac::TIM1.sr().read().uif() {
         return;
     }
-    pac::TIM1.sr().write(|_| {});
+    pac::TIM1.sr().write(|w| w.set_uif(false));
+    let _ = pac::TIM1.sr().read();
 
     let grid = GRID.load(Ordering::Relaxed);
     if grid.is_null() {
@@ -64,19 +71,17 @@ fn TIM1_UP_TIM10() {
     let grid = unsafe { &mut *grid };
 
     if !DRIVE_PHASE.load(Ordering::Relaxed) {
-        pac::TIM1
-            .arr()
-            .write_value(pac::timer::regs::ArrCore(
-                timer_arr_from_us(grid.prepare_delay_us()) as u32,
-            ));
+        let arr = timer_arr_from_us(grid.prepare_delay_us()) as u32;
+        pac::TIM1.arr().write_value(pac::timer::regs::ArrCore(arr));
+        pac::TIM1.cnt().write_value(pac::timer::regs::CntCore(0));
         grid.prepare_phase();
         DRIVE_PHASE.store(true, Ordering::Relaxed);
         return;
     }
 
-    pac::TIM1.arr().write_value(pac::timer::regs::ArrCore(
-        timer_arr_from_us(grid.drive_delay_us()) as u32,
-    ));
+    let arr = timer_arr_from_us(grid.drive_delay_us()) as u32;
+    pac::TIM1.arr().write_value(pac::timer::regs::ArrCore(arr));
+    pac::TIM1.cnt().write_value(pac::timer::regs::CntCore(0));
 
     grid.drive_phase();
     grid.advance_slot();
