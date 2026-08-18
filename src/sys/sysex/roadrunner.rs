@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use crate::app::AppId;
 use crate::driver::{self, M0FirmwareStatus, M0ProbeResult, RoadrunnerStats};
 use crate::sys::midi::MidiPort;
@@ -10,12 +10,30 @@ const NOVATION_HEADER: [u8; 6] = [0xf0, 0x00, 0x20, 0x29, 0x02, 0x0e];
 const M0_REQ_CMD: u8 = 0x70;
 const M0_RESP_CMD: u8 = 0x71;
 const M0_FLASH_CHUNK_LEN: usize = 256;
+const M0_FLASH_BASE: u32 = 0x0800_0000;
+const M0_FLASH_MAX_LEN: u32 = 32 * 1024;
+const M0_FIRMWARE_KIND_LEGACY: u8 = 0;
+const M0_FIRMWARE_KIND_ROADRUNNER: u8 = 1;
+const M0_STATUS_RESPONSE_MAX_LEN: usize = 73;
+const _: () = assert!(
+    crate::sys::driver::common::usb::midi::MIDI_TX_MAX_PACKET_COUNT
+        >= M0_STATUS_RESPONSE_MAX_LEN.div_ceil(3)
+);
 
 pub const M0_ROM_STATUS_OK: u8 = 0;
 pub const M0_ROM_STATUS_RX: u8 = 5;
 pub const M0_ROM_STATUS_ARG: u8 = 6;
 
 static M0_FLASH_ACTIVE: AtomicBool = AtomicBool::new(false);
+static M0_FLASH_BASE_ADDR: AtomicU32 = AtomicU32::new(M0_FLASH_BASE);
+static M0_FLASH_TOTAL_LEN: AtomicU32 = AtomicU32::new(0);
+static M0_FLASH_NEXT_WRITE: AtomicU32 = AtomicU32::new(M0_FLASH_BASE);
+static M0_FLASH_NEXT_VERIFY: AtomicU32 = AtomicU32::new(M0_FLASH_BASE);
+static M0_FLASH_LAST_WRITE_ADDR: AtomicU32 = AtomicU32::new(0);
+static M0_FLASH_LAST_WRITE_LEN: AtomicU32 = AtomicU32::new(0);
+static M0_FLASH_LAST_VERIFY_ADDR: AtomicU32 = AtomicU32::new(0);
+static M0_FLASH_LAST_VERIFY_LEN: AtomicU32 = AtomicU32::new(0);
+static M0_BOOT_RETRYABLE: AtomicBool = AtomicBool::new(false);
 static BOOT_CYCLE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub fn execute(_app: AppId, port: MidiPort, data: &[u8]) -> bool {
@@ -37,14 +55,17 @@ fn handle_m0(port: MidiPort, data: &[u8]) -> bool {
     }
 
     match data[7] {
-        b'S' => handle_status(port),
-        b'C' => handle_cached_status(port),
-        b'F' => handle_flash_info(port),
+        b'S' if data.len() == 9 => handle_status(port),
+        b'C' if data.len() == 9 => handle_cached_status(port),
+        b'F' if data.len() == 9 => handle_flash_info(port),
         b'B' => handle_flash_begin(port, data),
         b'D' => handle_flash_data(port, data),
         b'V' => handle_flash_verify(port, data),
-        b'O' => handle_boot(port),
-        b'T' => handle_roadrunner_stats(port),
+        b'O' if data.len() == 9 => handle_boot(port),
+        b'T' if data.len() == 9 => handle_roadrunner_stats(port),
+        b'S' | b'C' | b'F' | b'O' | b'T' => {
+            send_simple_response(port, data[7], M0_ROM_STATUS_ARG)
+        }
         _ => send_simple_response(port, data[7], M0_ROM_STATUS_ARG),
     }
 
@@ -80,8 +101,11 @@ fn handle_roadrunner_stats(port: MidiPort) {
 }
 
 fn handle_flash_begin(port: MidiPort, data: &[u8]) {
-    M0_FLASH_ACTIVE.store(false, Ordering::Release);
-    let Some(_base_addr) = parse_hex(data, 8, 8) else {
+    if data.len() != 25 {
+        send_simple_response(port, b'B', M0_ROM_STATUS_ARG);
+        return;
+    }
+    let Some(base_addr) = parse_hex(data, 8, 8) else {
         send_simple_response(port, b'B', M0_ROM_STATUS_ARG);
         return;
     };
@@ -89,13 +113,26 @@ fn handle_flash_begin(port: MidiPort, data: &[u8]) {
         send_simple_response(port, b'B', M0_ROM_STATUS_ARG);
         return;
     };
-    if total_len == 0 {
+    if base_addr != M0_FLASH_BASE || !(1..=M0_FLASH_MAX_LEN).contains(&total_len) {
         send_simple_response(port, b'B', M0_ROM_STATUS_ARG);
         return;
     }
 
+    M0_FLASH_ACTIVE.store(false, Ordering::Release);
+    M0_BOOT_RETRYABLE.store(false, Ordering::Release);
+    BOOT_CYCLE_REQUESTED.store(false, Ordering::Release);
     let status = driver::m0_force_rom_probe();
-    M0_FLASH_ACTIVE.store(status == M0_ROM_STATUS_OK, Ordering::Release);
+    if status == M0_ROM_STATUS_OK {
+        M0_FLASH_BASE_ADDR.store(base_addr, Ordering::Relaxed);
+        M0_FLASH_TOTAL_LEN.store(total_len, Ordering::Relaxed);
+        M0_FLASH_NEXT_WRITE.store(base_addr, Ordering::Relaxed);
+        M0_FLASH_NEXT_VERIFY.store(base_addr, Ordering::Relaxed);
+        M0_FLASH_LAST_WRITE_ADDR.store(0, Ordering::Relaxed);
+        M0_FLASH_LAST_WRITE_LEN.store(0, Ordering::Relaxed);
+        M0_FLASH_LAST_VERIFY_ADDR.store(0, Ordering::Relaxed);
+        M0_FLASH_LAST_VERIFY_LEN.store(0, Ordering::Relaxed);
+        M0_FLASH_ACTIVE.store(true, Ordering::Release);
+    }
     send_simple_response(port, b'B', status);
 }
 
@@ -105,7 +142,33 @@ fn handle_flash_data(port: MidiPort, data: &[u8]) {
         return;
     };
 
-    let status = driver::m0_rom_write(chunk.addr, &chunk.data[..chunk.len]);
+    let status = if !flash_chunk_in_range(chunk.addr, chunk.len) {
+        M0_ROM_STATUS_ARG
+    } else if !M0_FLASH_ACTIVE.load(Ordering::Acquire) {
+        M0_ROM_STATUS_RX
+    } else {
+        let next = M0_FLASH_NEXT_WRITE.load(Ordering::Acquire);
+        let last_addr = M0_FLASH_LAST_WRITE_ADDR.load(Ordering::Acquire);
+        let last_len = M0_FLASH_LAST_WRITE_LEN.load(Ordering::Acquire);
+        if chunk.addr == next {
+            let status = driver::m0_rom_write(chunk.addr, &chunk.data[..chunk.len]);
+            if status == M0_ROM_STATUS_OK {
+                M0_FLASH_NEXT_WRITE.store(
+                    chunk.addr + chunk.len as u32,
+                    Ordering::Release,
+                );
+                M0_FLASH_LAST_WRITE_ADDR.store(chunk.addr, Ordering::Relaxed);
+                M0_FLASH_LAST_WRITE_LEN.store(chunk.len as u32, Ordering::Relaxed);
+            }
+            status
+        } else if chunk.addr == last_addr && chunk.len as u32 == last_len {
+            // If the response to a successful write was lost, replaying the
+            // same chunk is safe only after confirming flash contains it.
+            verify_chunk_bytes(&chunk)
+        } else {
+            M0_ROM_STATUS_ARG
+        }
+    };
     let len = if status == M0_ROM_STATUS_OK {
         chunk.len
     } else {
@@ -120,16 +183,33 @@ fn handle_flash_verify(port: MidiPort, data: &[u8]) {
         return;
     };
 
-    let mut readback = [0u8; M0_FLASH_CHUNK_LEN];
-    let status = driver::m0_rom_read(chunk.addr, &mut readback[..chunk.len]);
-    let status = if status == M0_ROM_STATUS_OK {
-        if readback[..chunk.len] == chunk.data[..chunk.len] {
-            M0_ROM_STATUS_OK
+    let status = if !flash_chunk_in_range(chunk.addr, chunk.len) {
+        M0_ROM_STATUS_ARG
+    } else if !M0_FLASH_ACTIVE.load(Ordering::Acquire) {
+        M0_ROM_STATUS_RX
+    } else {
+        let next = M0_FLASH_NEXT_VERIFY.load(Ordering::Acquire);
+        let last_addr = M0_FLASH_LAST_VERIFY_ADDR.load(Ordering::Acquire);
+        let last_len = M0_FLASH_LAST_VERIFY_LEN.load(Ordering::Acquire);
+        let next_write = M0_FLASH_NEXT_WRITE.load(Ordering::Acquire);
+        let chunk_end = chunk.addr + chunk.len as u32;
+        if chunk_end > next_write {
+            M0_ROM_STATUS_RX
+        } else if chunk.addr == next {
+            let status = verify_chunk_bytes(&chunk);
+            if status == M0_ROM_STATUS_OK {
+                M0_FLASH_NEXT_VERIFY.store(chunk_end, Ordering::Release);
+                M0_FLASH_LAST_VERIFY_ADDR.store(chunk.addr, Ordering::Relaxed);
+                M0_FLASH_LAST_VERIFY_LEN.store(chunk.len as u32, Ordering::Relaxed);
+            }
+            status
+        } else if chunk.addr == last_addr && chunk.len as u32 == last_len {
+            // Verification requests are also idempotent for a retried MIDI
+            // transaction after the original response was lost.
+            verify_chunk_bytes(&chunk)
         } else {
             M0_ROM_STATUS_ARG
         }
-    } else {
-        status
     };
     let len = if status == M0_ROM_STATUS_OK {
         chunk.len
@@ -140,13 +220,37 @@ fn handle_flash_verify(port: MidiPort, data: &[u8]) {
 }
 
 fn handle_boot(port: MidiPort) {
-    let completes_flash = M0_FLASH_ACTIVE.swap(false, Ordering::AcqRel);
+    if !flash_session_complete() {
+        if M0_BOOT_RETRYABLE.load(Ordering::Acquire) {
+            if let Some(status) = driver::cached_m0_firmware_status() {
+                send_status_response(port, b'O', &status);
+                return;
+            }
+        }
+        let mut status = driver::cached_m0_firmware_status()
+            .unwrap_or_else(M0FirmwareStatus::unknown);
+        status.status = M0_ROM_STATUS_ARG;
+        send_status_response(port, b'O', &status);
+        return;
+    }
+
+    M0_BOOT_RETRYABLE.store(false, Ordering::Release);
+    M0_FLASH_ACTIVE.store(false, Ordering::Release);
     driver::m0_set_mode(2);
     match driver::refresh_m0_firmware_status() {
         Some(status) => {
-            let firmware_started = status.status == M0_ROM_STATUS_OK;
-            send_status_response(port, b'O', &status);
-            if completes_flash && firmware_started {
+            let known_kind = matches!(
+                status.kind,
+                M0_FIRMWARE_KIND_LEGACY | M0_FIRMWARE_KIND_ROADRUNNER
+            );
+            let firmware_started = status.status == M0_ROM_STATUS_OK && known_kind;
+            let mut response = status;
+            if response.status == M0_ROM_STATUS_OK && !known_kind {
+                response.status = M0_ROM_STATUS_ARG;
+            }
+            send_status_response(port, b'O', &response);
+            if firmware_started {
+                M0_BOOT_RETRYABLE.store(true, Ordering::Release);
                 BOOT_CYCLE_REQUESTED.store(true, Ordering::Release);
             }
         }
@@ -166,7 +270,7 @@ fn parse_chunk(data: &[u8]) -> Option<FlashChunk> {
     if len == 0 || len > M0_FLASH_CHUNK_LEN {
         return None;
     }
-    if 20 + (len * 2) > data.len().saturating_sub(1) {
+    if data.len() != 21 + (len * 2) {
         return None;
     }
 
@@ -179,6 +283,43 @@ fn parse_chunk(data: &[u8]) -> Option<FlashChunk> {
         len,
         data: chunk,
     })
+}
+
+fn flash_chunk_in_range(addr: u32, len: usize) -> bool {
+    if len == 0 || len > M0_FLASH_CHUNK_LEN {
+        return false;
+    }
+    let base = M0_FLASH_BASE_ADDR.load(Ordering::Acquire);
+    let total = M0_FLASH_TOTAL_LEN.load(Ordering::Acquire);
+    let Some(end) = base.checked_add(total) else {
+        return false;
+    };
+    addr >= base && (len as u32) <= end.saturating_sub(addr)
+}
+
+fn flash_session_complete() -> bool {
+    if !M0_FLASH_ACTIVE.load(Ordering::Acquire) {
+        return false;
+    }
+    let base = M0_FLASH_BASE_ADDR.load(Ordering::Acquire);
+    let total = M0_FLASH_TOTAL_LEN.load(Ordering::Acquire);
+    let Some(end) = base.checked_add(total) else {
+        return false;
+    };
+    M0_FLASH_NEXT_WRITE.load(Ordering::Acquire) == end
+        && M0_FLASH_NEXT_VERIFY.load(Ordering::Acquire) == end
+}
+
+fn verify_chunk_bytes(chunk: &FlashChunk) -> u8 {
+    let mut readback = [0u8; M0_FLASH_CHUNK_LEN];
+    let status = driver::m0_rom_read(chunk.addr, &mut readback[..chunk.len]);
+    if status == M0_ROM_STATUS_OK && readback[..chunk.len] == chunk.data[..chunk.len] {
+        M0_ROM_STATUS_OK
+    } else if status == M0_ROM_STATUS_OK {
+        M0_ROM_STATUS_ARG
+    } else {
+        status
+    }
 }
 
 fn send_status_response(port: MidiPort, cmd: u8, status: &M0FirmwareStatus) {

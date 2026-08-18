@@ -14,6 +14,7 @@ from typing import Dict, NamedTuple, Optional, Sequence, Tuple
 REQ = [0x00, 0x20, 0x29, 0x02, 0x0E, 0x70]
 RESP = [0x00, 0x20, 0x29, 0x02, 0x0E, 0x71]
 FLASH_BASE = 0x08000000
+FLASH_MAX_LEN = 32 * 1024
 CHUNK_LEN = 256
 
 STATUS_NAMES: Dict[int, str] = {
@@ -155,21 +156,24 @@ def transact(mido, outport, inport, cmd: str, payload: bytes = b"", timeout: flo
 
 def parse_simple(payload: bytes) -> int:
     text = payload.decode("ascii")
-    if len(text) < 2:
-        raise ValueError(f"Short response: {text!r}")
+    if len(text) != 2:
+        raise ValueError(f"Invalid response length: {len(text)} (expected 2)")
     return int(text[:2], 16)
 
 
 def parse_chunk(payload: bytes) -> Tuple[int, int, int]:
     text = payload.decode("ascii")
-    if len(text) < 14:
-        raise ValueError(f"Short chunk response: {text!r}")
+    if len(text) != 14:
+        raise ValueError(f"Invalid chunk response length: {len(text)} (expected 14)")
     return int(text[0:2], 16), int(text[2:10], 16), int(text[10:14], 16)
 
 
 def parse_status(payload: bytes) -> Status:
     text = payload.decode("ascii")
-    if len(text) < 36:
+    # The fixed status fields occupy 32 hex characters. A zero-length vector
+    # is valid, so 32 is the shortest valid payload (the old parser rejected
+    # this common response by requiring 36 characters).
+    if len(text) < 32:
         raise ValueError(f"Short status response: {text!r}")
     status = int(text[0:2], 16)
     kind = int(text[2:4], 16)
@@ -183,6 +187,13 @@ def parse_status(payload: bytes) -> Status:
     pid = int(text[24:28], 16)
     blid = int(text[28:30], 16)
     vector_len = int(text[30:32], 16)
+    if vector_len > 16:
+        raise ValueError(f"Invalid vector length: {vector_len}")
+    expected_len = 32 + vector_len * 2
+    if len(text) != expected_len:
+        raise ValueError(
+            f"Invalid status payload length: {len(text)} (expected {expected_len})"
+        )
     vector_hex = text[32 : 32 + vector_len * 2]
     vector = bytes.fromhex(vector_hex) if vector_hex else b""
     return Status(status, kind, major, minor, patch, probe_status, read_status, ack, baud, pid, blid, vector)
@@ -190,8 +201,8 @@ def parse_status(payload: bytes) -> Status:
 
 def parse_stats(payload: bytes) -> Stats:
     text = payload.decode("ascii")
-    if len(text) < 26:
-        raise ValueError(f"Short stats response: {text!r}")
+    if len(text) != 26:
+        raise ValueError(f"Invalid stats response length: {len(text)} (expected 26)")
     return Stats(
         int(text[0:2], 16),
         int(text[2:10], 16),
@@ -258,9 +269,24 @@ def do_flash(mido, outport, inport, timeout: float, path: Path, base: int) -> No
     data = path.read_bytes()
     if not data:
         raise SystemExit("Binary is empty.")
+    if base != FLASH_BASE:
+        raise SystemExit(f"Roadrunner flash base must be 0x{FLASH_BASE:08X}.")
+    if len(data) > FLASH_MAX_LEN:
+        raise SystemExit(
+            f"Binary is too large ({len(data)} bytes; maximum is {FLASH_MAX_LEN})."
+        )
 
     print(f"Flashing {path} ({len(data)} bytes) to 0x{base:08X}")
-    begin = parse_simple(transact(mido, outport, inport, "B", f"{base:08X}{len(data):08X}".encode("ascii"), timeout=timeout))
+    begin = parse_simple(
+        transact(
+            mido,
+            outport,
+            inport,
+            "B",
+            f"{base:08X}{len(data):08X}".encode("ascii"),
+            timeout=max(timeout, 20.0),
+        )
+    )
     if begin != 0:
         raise SystemExit(f"Flash begin failed: 0x{begin:02X} ({status_name(begin)})")
 
@@ -286,7 +312,7 @@ def do_flash(mido, outport, inport, timeout: float, path: Path, base: int) -> No
             raise SystemExit(f"\nWrite failed at 0x{base + offset:08X}: 0x{status:02X} ({status_name(status)})")
 
         progress("Writing", offset + len(chunk), len(data), start)
-        offset += chunk_len
+        offset += len(chunk)
     print()
 
     offset = 0
@@ -298,13 +324,13 @@ def do_flash(mido, outport, inport, timeout: float, path: Path, base: int) -> No
         if status != 0 or addr != base + offset or verified != len(chunk):
             raise SystemExit(f"\nVerify failed at 0x{base + offset:08X}: 0x{status:02X} ({status_name(status)})")
         progress("Verifying", offset + len(chunk), len(data), start)
-        offset += chunk_len
+        offset += len(chunk)
     print()
 
     print("Booting M0 and refreshing status...")
     final = parse_status(transact(mido, outport, inport, "O", timeout=max(timeout, 8.0)))
     print_status(final)
-    if final.kind != 1:
+    if final.status != 0 or final.kind != 1:
         raise SystemExit("Flash verified, but Roadrunner did not answer the version inquiry.")
 
 

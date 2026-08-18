@@ -4,7 +4,7 @@
 use crate::app::{MidiEvent, MidiPort};
 
 pub const SYSEX_MAX_LEN: usize = 600;
-pub const MIDI_TX_MAX_PACKET_COUNT: usize = 16; // 16 * 4 = 64 bytes (1 max USB FS packet)
+pub const MIDI_TX_MAX_PACKET_COUNT: usize = 32;
 
 #[derive(Copy, Clone)]
 #[repr(C)]
