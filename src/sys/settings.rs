@@ -29,6 +29,19 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub const fn empty() -> Self {
+        Self {
+            brightness: 0,
+            velocity_enabled: 0,
+            velocity_curve: 0,
+            aftertouch_mode: 0,
+            aftertouch_curve: 0,
+            palette: 0,
+            mirror_enabled: 0,
+            custom_palette: [[[0; 128]; 3]; 3],
+        }
+    }
+
     pub const fn defaults() -> Self {
         Self {
             brightness: 7,
@@ -150,7 +163,7 @@ struct SettingsSlot {
 unsafe impl Sync for SettingsSlot {}
 
 static SETTINGS: SettingsSlot = SettingsSlot {
-    inner: UnsafeCell::new(Settings::defaults()),
+    inner: UnsafeCell::new(Settings::empty()),
 };
 
 pub fn get() -> Settings {

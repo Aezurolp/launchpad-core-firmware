@@ -89,9 +89,17 @@ impl LedState {
             pulse: [LedColor::NONE; LED_COUNT],
             tempo_counter: 0,
             tempo_timer: 0,
-            tempo_bar: DEFAULT_TEMPO_BAR_TICKS,
+            tempo_bar: 0,
             tempo_listen: false,
             tempo_message_counter: 0,
+        }
+    }
+
+    fn tempo_bar(&self) -> u32 {
+        if self.tempo_bar == 0 {
+            DEFAULT_TEMPO_BAR_TICKS
+        } else {
+            self.tempo_bar
         }
     }
 }
@@ -261,14 +269,15 @@ pub fn tick() {
     LED_STATE.with(|state| {
         state.tempo_timer = state.tempo_timer.saturating_add(1);
 
+        let tempo_bar = state.tempo_bar();
         state.tempo_counter += 1;
-        if state.tempo_counter >= state.tempo_bar {
+        if state.tempo_counter >= tempo_bar {
             state.tempo_counter = 0;
         }
 
-        let flash_period = state.tempo_bar >> 2;
-        let flash_on = (state.tempo_counter % flash_period) < (state.tempo_bar >> 3);
-        let pulse_factor = pulse_factor(state.tempo_counter, state.tempo_bar);
+        let flash_period = tempo_bar >> 2;
+        let flash_on = (state.tempo_counter % flash_period) < (tempo_bar >> 3);
+        let pulse_factor = pulse_factor(state.tempo_counter, tempo_bar);
 
         for index in 0..LED_COUNT {
             let pulse = state.pulse[index];
@@ -364,8 +373,9 @@ fn update_pulse(index: u8, color: LedColor) {
 
 fn render_flash(index: u8, color: LedColor) {
     LED_STATE.with(|state| {
-        let flash_period = state.tempo_bar >> 2;
-        let flash_on = (state.tempo_counter % flash_period) < (state.tempo_bar >> 3);
+        let tempo_bar = state.tempo_bar();
+        let flash_period = tempo_bar >> 2;
+        let flash_on = (state.tempo_counter % flash_period) < (tempo_bar >> 3);
         render_color(
             index,
             if flash_on {
@@ -379,9 +389,10 @@ fn render_flash(index: u8, color: LedColor) {
 
 fn render_pulse(index: u8, color: LedColor) {
     LED_STATE.with(|state| {
+        let tempo_bar = state.tempo_bar();
         render_color(
             index,
-            color.scaled(pulse_factor(state.tempo_counter, state.tempo_bar)),
+            color.scaled(pulse_factor(state.tempo_counter, tempo_bar)),
         );
     });
 }
@@ -402,7 +413,9 @@ fn render_color(index: u8, color: LedColor) {
 }
 
 fn pulse_factor(tempo_counter: u32, tempo_bar: u32) -> u8 {
-    let t = tempo_counter % (tempo_bar >> 1);
+    let tempo_bar = if tempo_bar == 0 { DEFAULT_TEMPO_BAR_TICKS } else { tempo_bar };
+    let half_bar = (tempo_bar >> 1).max(1);
+    let t = tempo_counter % half_bar;
 
     if t < (tempo_bar >> 3) {
         ((15 * tempo_bar + 384 * t) / tempo_bar) as u8
