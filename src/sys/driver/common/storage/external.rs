@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
+// Copyright (C) 2026 ZephyrCodesStuff
 
 use core::cmp::min;
+
+#[cfg(feature = "launchpad-pro-mk3")]
 use core::convert::Infallible;
+#[cfg(feature = "launchpad-pro-mk3")]
+use embedded_hal::digital::v2::OutputPin;
 
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::mode::Blocking;
@@ -11,26 +16,37 @@ use embassy_stm32::spi::mode::Master;
 use embassy_stm32::spi::{Config as SpiConfig, Spi};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::Peri;
-use embedded_hal::digital::v2::OutputPin;
+
 use embedded_storage::nor_flash::{
     check_erase, check_read, check_write, ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash,
 };
 use spi_memory::series25::Flash;
 use spi_memory::{BlockDevice, Read};
 
-const PAGE_SIZE: usize = 256;
-const SECTOR_SIZE: usize = 4096;
-const TOTAL_SIZE: u32 = 16 * 1024 * 1024;
-const SETTINGS_SIZE: u32 = 8 * 1024;
-const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
+pub const PAGE_SIZE: usize = 256;
+pub const SECTOR_SIZE: usize = 4096;
+
+#[cfg(feature = "launchpad-pro-mk3")]
+pub const TOTAL_SIZE: u32 = 16 * 1024 * 1024;
+#[cfg(not(feature = "launchpad-pro-mk3"))]
+pub const TOTAL_SIZE: u32 = 1024 * 1024;
+
+pub const SETTINGS_SIZE: u32 = 8 * 1024;
+pub const SETTINGS_OFFSET: u32 = TOTAL_SIZE - SETTINGS_SIZE;
+
+#[cfg(feature = "launchpad-pro-mk3")]
 const EXPECTED_JEDEC_MANUFACTURER: u8 = 0xc2;
+#[cfg(feature = "launchpad-pro-mk3")]
 const EXPECTED_JEDEC_CAPACITY: u8 = 0x18;
 // The MCU runs at 216 MHz. Keep CS high for about 1 us between commands;
 // this comfortably exceeds the flash chip's minimum CS deselect time.
+#[cfg(feature = "launchpad-pro-mk3")]
 const CS_DESELECT_DELAY_CYCLES: u32 = 216;
 
-struct FlashCs<'d>(Output<'d>);
+#[cfg(feature = "launchpad-pro-mk3")]
+pub struct FlashCs<'d>(Output<'d>);
 
+#[cfg(feature = "launchpad-pro-mk3")]
 impl OutputPin for FlashCs<'_> {
     type Error = Infallible;
 
@@ -46,12 +62,10 @@ impl OutputPin for FlashCs<'_> {
     }
 }
 
-pub struct ExtFlash<'d> {
-    flash: Option<Flash<Spi<'d, Blocking, Master>, FlashCs<'d>>>,
-    sector_buf: [u8; SECTOR_SIZE],
-    jedec_id: [u8; 3],
-    present: bool,
-}
+#[cfg(feature = "launchpad-pro-mk3")]
+type FlashCsPin<'d> = FlashCs<'d>;
+#[cfg(not(feature = "launchpad-pro-mk3"))]
+type FlashCsPin<'d> = Output<'d>;
 
 #[derive(Clone, Copy)]
 pub struct ExtFlashInfo {
@@ -60,7 +74,63 @@ pub struct ExtFlashInfo {
     pub status1: u8,
 }
 
+pub struct ExtFlash<'d> {
+    flash: Option<Flash<Spi<'d, Blocking, Master>, FlashCsPin<'d>>>,
+    sector_buf: [u8; SECTOR_SIZE],
+    jedec_id: [u8; 3],
+    present: bool,
+}
+
 impl<'d> ExtFlash<'d> {
+    #[cfg(feature = "launchpad-x")]
+    pub fn new(
+        spi2: Peri<'d, peripherals::SPI2>,
+        pb13: Peri<'d, peripherals::PB13>,
+        pb15: Peri<'d, peripherals::PB15>,
+        pb14: Peri<'d, peripherals::PB14>,
+        pb12: Peri<'d, peripherals::PB12>,
+    ) -> Self {
+        let mut spi_cfg = SpiConfig::default();
+        spi_cfg.frequency = Hertz(10_500_000);
+
+        let spi = Spi::new_blocking(spi2, pb13, pb15, pb14, spi_cfg);
+        let cs = Output::new(pb12, Level::High, Speed::VeryHigh);
+
+        let mut this = Self {
+            flash: Flash::init(spi, cs).ok(),
+            sector_buf: [0xff; SECTOR_SIZE],
+            jedec_id: [0; 3],
+            present: false,
+        };
+        this.probe();
+        this
+    }
+
+    #[cfg(feature = "launchpad-mini-mk3")]
+    pub fn new(
+        spi1: Peri<'d, peripherals::SPI1>,
+        pa5: Peri<'d, peripherals::PA5>,
+        pa7: Peri<'d, peripherals::PA7>,
+        pa6: Peri<'d, peripherals::PA6>,
+        pa2: Peri<'d, peripherals::PA2>,
+    ) -> Self {
+        let mut spi_cfg = SpiConfig::default();
+        spi_cfg.frequency = Hertz(10_500_000);
+
+        let spi = Spi::new_blocking(spi1, pa5, pa7, pa6, spi_cfg);
+        let cs = Output::new(pa2, Level::High, Speed::VeryHigh);
+
+        let mut this = Self {
+            flash: Flash::init(spi, cs).ok(),
+            sector_buf: [0xff; SECTOR_SIZE],
+            jedec_id: [0; 3],
+            present: false,
+        };
+        this.probe();
+        this
+    }
+
+    #[cfg(feature = "launchpad-pro-mk3")]
     pub fn new(
         spi1: Peri<'d, peripherals::SPI1>,
         pa5: Peri<'d, peripherals::PA5>,
@@ -73,6 +143,7 @@ impl<'d> ExtFlash<'d> {
 
         let spi = Spi::new_blocking(spi1, pa5, pb5, pb4, spi_cfg);
         let cs = FlashCs(Output::new(pa15, Level::High, Speed::VeryHigh));
+
         let mut this = Self {
             flash: Flash::init(spi, cs).ok(),
             sector_buf: [0xff; SECTOR_SIZE],
@@ -81,6 +152,23 @@ impl<'d> ExtFlash<'d> {
         };
         this.probe();
         this
+    }
+
+    pub const fn settings_size(&self) -> u32 {
+        SETTINGS_SIZE
+    }
+
+    pub fn read_settings(&mut self, offset: u32, data: &mut [u8]) {
+        if data.is_empty() {
+            return;
+        }
+        if self.read(offset, data).is_err() {
+            data.fill(0xff);
+        }
+    }
+
+    pub fn write_settings(&mut self, offset: u32, data: &[u8]) {
+        let _ = self.write(offset, data);
     }
 
     pub fn info(&mut self) -> ExtFlashInfo {
@@ -106,8 +194,15 @@ impl<'d> ExtFlash<'d> {
         };
         let device_id = id.device_id();
         self.jedec_id = [id.mfr_code(), device_id[0], device_id[1]];
-        self.present = self.jedec_id[0] == EXPECTED_JEDEC_MANUFACTURER
-            && self.jedec_id[2] == EXPECTED_JEDEC_CAPACITY;
+        #[cfg(feature = "launchpad-pro-mk3")]
+        {
+            self.present = self.jedec_id[0] == EXPECTED_JEDEC_MANUFACTURER
+                && self.jedec_id[2] == EXPECTED_JEDEC_CAPACITY;
+        }
+        #[cfg(not(feature = "launchpad-pro-mk3"))]
+        {
+            self.present = true;
+        }
     }
 
     fn status1(&mut self) -> u8 {

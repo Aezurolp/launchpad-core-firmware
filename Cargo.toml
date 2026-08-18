@@ -113,6 +113,7 @@ launchpad-mk2 = [
   "embassy-stm32/stm32f103rb",
   "dep:embassy-sync",
   "dep:embassy-time",
+  "dep:embedded-storage",
   "dep:heapless",
   "dep:static_cell",
   "dep:stm32-metapac",

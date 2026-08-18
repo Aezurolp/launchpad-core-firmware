@@ -10,7 +10,7 @@ use embassy_stm32::Peri;
 use embedded_hal_nb::nb;
 use embedded_hal_nb::serial::Read;
 
-use super::extflash::ExtFlash;
+use crate::sys::driver::common::storage::ExtFlash;
 use super::led::LedSystem;
 use super::map::{BUTTON_REMAP, BUTTON_REMAP_SIZE, LED_REMAP_SIZE};
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};

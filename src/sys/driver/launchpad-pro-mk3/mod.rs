@@ -3,7 +3,8 @@
 
 
 
-pub mod extflash;
+use crate::sys::driver::common::storage::ExtFlash;
+
 pub mod led;
 mod map;
 mod runtime;
@@ -104,7 +105,7 @@ async fn main(_spawner: Spawner) {
     }
 
     static RUNTIME_DRIVER: StaticCell<RuntimeDriver> = StaticCell::new();
-    let flash = extflash::ExtFlash::new(p.SPI1, p.PA5, p.PB5, p.PB4, p.PA15);
+    let flash = ExtFlash::new(p.SPI1, p.PA5, p.PB5, p.PB4, p.PA15);
     let runtime_driver = RUNTIME_DRIVER.init(RuntimeDriver::new(
         p.UART5, p.PD2, p.PC12, p.PA4, p.PA6, p.PA2, p.PA3, flash,
     ));

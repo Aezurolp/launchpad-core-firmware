@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-pub mod flash;
 pub mod grid;
 pub mod inputs;
 pub mod leds;
 pub mod runtime;
 pub mod surface;
 pub mod usb;
+
+use crate::sys::driver::common::storage::Flash;
 
 use embassy_executor::Spawner;
 use embassy_stm32::interrupt::InterruptExt;
@@ -61,7 +62,7 @@ async fn main(spawner: Spawner) {
     usb::init();
 
     let grid = GRID.init(grid::Grid::new());
-    let flash = flash::Flash::new();
+    let flash = Flash::new();
     let runtime_driver = RUNTIME_DRIVER.init(runtime::RuntimeDriver::new(grid, flash));
     driver::install(runtime_driver);
     settings::load();

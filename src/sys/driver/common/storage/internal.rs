@@ -5,13 +5,18 @@ use core::cmp::min;
 use core::ptr;
 
 use embedded_storage::nor_flash::{
-    ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash, check_erase, check_read, check_write,
+    check_erase, check_read, check_write, ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash,
 };
 use stm32_metapac as pac;
 
-const SETTINGS_START: u32 = 0x0801_e000;
-const SETTINGS_SIZE: u32 = 6 * 1024;
-const PAGE_SIZE: usize = 1024;
+pub const SETTINGS_START: u32 = 0x0801_e000;
+
+#[cfg(feature = "launchpad-pro")]
+pub const SETTINGS_SIZE: u32 = 6 * 1024;
+#[cfg(not(feature = "launchpad-pro"))]
+pub const SETTINGS_SIZE: u32 = 8 * 1024;
+
+pub const PAGE_SIZE: usize = 1024;
 
 const FLASH_KEY1: u32 = 0x4567_0123;
 const FLASH_KEY2: u32 = 0xcdef_89ab;
@@ -26,6 +31,23 @@ impl Flash {
             page_buf: [0xff; PAGE_SIZE],
         }
     }
+
+    pub const fn settings_size(&self) -> u32 {
+        SETTINGS_SIZE
+    }
+
+    pub fn read_settings(&mut self, offset: u32, data: &mut [u8]) {
+        if data.is_empty() {
+            return;
+        }
+        if self.read(offset, data).is_err() {
+            data.fill(0xff);
+        }
+    }
+
+    pub fn write_settings(&mut self, offset: u32, data: &[u8]) {
+        let _ = self.write(offset, data);
+    }
 }
 
 impl ErrorType for Flash {
@@ -38,7 +60,6 @@ impl ReadNorFlash for Flash {
     fn read(&mut self, offset: u32, data: &mut [u8]) -> Result<(), Self::Error> {
         check_read(self, offset, data.len())?;
         read_memory(offset, data);
-
         Ok(())
     }
 

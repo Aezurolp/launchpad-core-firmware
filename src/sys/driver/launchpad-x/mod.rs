@@ -2,13 +2,14 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 // Copyright (C) 2026 ZephyrCodesStuff
 
-pub mod extflash;
 pub mod grid;
 pub mod inputs;
 pub mod led_scan;
 pub mod leds;
 pub mod runtime;
 pub mod usb;
+
+use crate::sys::driver::common::storage::ExtFlash;
 
 use embassy_executor::Spawner;
 use embassy_stm32::rcc::*;
@@ -57,7 +58,7 @@ async fn main(_spawner: Spawner) {
     usb::init();
 
     let grid = GRID.init(grid::Grid::new());
-    let flash = extflash::ExtFlash::new(p.SPI2, p.PB13, p.PB15, p.PB14, p.PB12);
+    let flash = ExtFlash::new(p.SPI2, p.PB13, p.PB15, p.PB14, p.PB12);
     let runtime_driver = RUNTIME_DRIVER.init(runtime::RuntimeDriver::new(grid, flash));
     driver::install(runtime_driver);
     settings::load();

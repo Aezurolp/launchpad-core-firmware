@@ -2,12 +2,13 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
 pub mod buttons;
-pub mod extflash;
 pub mod grid;
 pub mod led_scan;
 pub mod leds;
 pub mod runtime;
 pub mod usb;
+
+use crate::sys::driver::common::storage::ExtFlash;
 
 use embassy_executor::Spawner;
 use embassy_stm32::rcc::*;
@@ -60,7 +61,7 @@ async fn main(_spawner: Spawner) {
         p.PB12,
     ));
 
-    let flash = extflash::ExtFlash::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.PA2);
+    let flash = ExtFlash::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.PA2);
     let runtime_driver = RUNTIME_DRIVER.init(runtime::RuntimeDriver::new(grid, flash));
     driver::install(runtime_driver);
     settings::load();

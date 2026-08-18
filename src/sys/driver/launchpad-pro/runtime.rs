@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use super::flash::Flash;
 use super::grid::Grid;
 use super::usb;
+use crate::sys::driver::common::storage::Flash;
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use crate::sys::driver::Driver;
 use crate::sys::midi::MidiPort;

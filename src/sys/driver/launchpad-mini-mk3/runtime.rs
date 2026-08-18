@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 Anthony Hofmeister
 
-use super::extflash::ExtFlash;
 use super::grid::Grid;
 use super::usb;
-use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 use crate::sys::driver::Driver;
+use crate::sys::driver::common::storage::ExtFlash;
 use crate::sys::midi::MidiPort;
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 
 pub struct RuntimeDriver {
     grid: *mut Grid<'static>,

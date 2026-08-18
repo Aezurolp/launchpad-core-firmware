@@ -2,10 +2,10 @@
 // Copyright (C) 2025-2026 Anthony Hofmeister
 // Copyright (C) 2026 ZephyrCodesStuff
 
-use super::extflash::ExtFlash;
 use super::grid::Grid;
 use super::usb;
 use crate::sys::driver::Driver;
+use crate::sys::driver::common::storage::ExtFlash;
 use crate::sys::midi::MidiPort;
 
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
@@ -55,7 +55,9 @@ impl Driver for RuntimeDriver {
     }
 
     fn read_flash(&mut self, offset: u32, data: &mut [u8]) {
-        let _ = self.flash.read(offset, data);
+        if self.flash.read(offset, data).is_err() {
+            data.fill(0xff);
+        }
     }
 
     fn write_flash(&mut self, offset: u32, data: &[u8]) {
