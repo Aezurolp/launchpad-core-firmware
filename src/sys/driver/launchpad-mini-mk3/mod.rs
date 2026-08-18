@@ -53,9 +53,7 @@ async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(config);
 
     usb::init_event_queues();
-
-    let usb_driver = usb::make_driver(p.USB_OTG_FS, p.PA12, p.PA11);
-    usb::spawn(&_spawner, usb_driver);
+    usb::init();
 
     let grid = GRID.init(grid::Grid::new(
         p.SPI2, p.PB13, p.PB15, p.PB14, p.PA1, p.PA4, p.PA8, p.PB0, p.PB1, p.PB2, p.PB8, p.PB10,
@@ -101,6 +99,8 @@ async fn main(_spawner: Spawner) {
                 }
             }
         }
+
+        usb::poll();
 
         while let Some(event) = usb::dequeue_midi_event() {
             app_host_guard.route_midi_event(event);

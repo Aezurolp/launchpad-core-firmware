@@ -23,7 +23,7 @@ use static_cell::StaticCell;
 type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost>;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     static GRID: StaticCell<grid::Grid> = StaticCell::new();
     static RUNTIME_DRIVER: StaticCell<runtime::RuntimeDriver> = StaticCell::new();
     static APP_HOST: StaticCell<SharedAppHost> = StaticCell::new();
@@ -54,9 +54,7 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(config);
 
     usb::init_event_queues();
-
-    let usb_driver = usb::make_driver(p.USB_OTG_FS, p.PA12, p.PA11);
-    usb::spawn(&spawner, usb_driver);
+    usb::init();
 
     let grid = GRID.init(grid::Grid::new());
     let flash = extflash::ExtFlash::new(p.SPI2, p.PB13, p.PB15, p.PB14, p.PB12);
@@ -99,6 +97,8 @@ async fn main(spawner: Spawner) {
                 }
             }
         }
+
+        usb::poll();
 
         while let Some(event) = usb::dequeue_midi_event() {
             app_host_guard.route_midi_event(event);

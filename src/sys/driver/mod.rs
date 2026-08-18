@@ -5,6 +5,8 @@ use core::cell::UnsafeCell;
 use core::mem;
 use crate::sys::midi::MidiPort;
 
+pub mod common;
+
 #[cfg(feature = "launchpad-x")]
 #[path = "launchpad-x/mod.rs"]
 pub mod launchpad_x;

@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 Anthony Hofmeister
+
+use core::cell::UnsafeCell;
+use crate::app::MidiEvent;
+use super::midi::{SysexMessage, UsbMidiPacket};
+
+pub const MIDI_RX_QUEUE_SIZE: usize = 128;
+pub const SYSEX_RX_QUEUE_SIZE: usize = 4;
+pub const MIDI_TX_QUEUE_SIZE: usize = 64;
+
+pub struct Ring<T, const N: usize> {
+    buffer: [T; N],
+    head: usize,
+    tail: usize,
+}
+
+impl<T: Copy, const N: usize> Ring<T, N> {
+    pub const fn new(init: T) -> Self {
+        Self {
+            buffer: [init; N],
+            head: 0,
+            tail: 0,
+        }
+    }
+
+    pub fn push(&mut self, item: T) -> bool {
+        let next = (self.head + 1) % N;
+        if next == self.tail {
+            return false;
+        }
+        self.buffer[self.head] = item;
+        self.head = next;
+        true
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        if self.head == self.tail {
+            return None;
+        }
+        let item = self.buffer[self.tail];
+        self.tail = (self.tail + 1) % N;
+        Some(item)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.head == self.tail
+    }
+
+    pub fn len(&self) -> usize {
+        if self.head >= self.tail {
+            self.head - self.tail
+        } else {
+            N - self.tail + self.head
+        }
+    }
+
+    pub fn free_space(&self) -> usize {
+        (N - 1) - self.len()
+    }
+}
+
+pub struct UsbQueues {
+    pub midi_rx: Ring<MidiEvent, MIDI_RX_QUEUE_SIZE>,
+    pub sysex_rx: Ring<SysexMessage, SYSEX_RX_QUEUE_SIZE>,
+    pub midi_tx: Ring<UsbMidiPacket, MIDI_TX_QUEUE_SIZE>,
+}
+
+impl UsbQueues {
+    pub const fn new() -> Self {
+        Self {
+            midi_rx: Ring::new(MidiEvent {
+                port: crate::app::MidiPort::Daw,
+                status: 0,
+                data1: 0,
+                data2: 0,
+            }),
+            sysex_rx: Ring::new(SysexMessage::empty()),
+            midi_tx: Ring::new(UsbMidiPacket::empty()),
+        }
+    }
+}
+
+pub struct UsbQueuesCell(UnsafeCell<UsbQueues>);
+unsafe impl Sync for UsbQueuesCell {}
+
+pub static QUEUES: UsbQueuesCell = UsbQueuesCell(UnsafeCell::new(UsbQueues::new()));
+
+#[inline(always)]
+pub fn queues() -> &'static mut UsbQueues {
+    unsafe { &mut *QUEUES.0.get() }
+}

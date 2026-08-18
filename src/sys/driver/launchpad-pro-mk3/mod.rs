@@ -55,7 +55,7 @@ pub type SharedAppHost =
     embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::ThreadModeRawMutex, AppHostType>;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     unsafe {
         core::ptr::write_volatile(0xE000_E010 as *mut u32, 0);
         core::ptr::write_volatile(0xE000_ED04 as *mut u32, 1 << 25);
@@ -127,8 +127,7 @@ async fn main(spawner: Spawner) {
     }
 
     usb::init_event_queues();
-    let usb_driver = usb::make_driver(p.USB_OTG_FS, p.PA12, p.PA11);
-    usb::spawn(&spawner, usb_driver);
+    usb::init();
 
     let app_host = AppHost::new(AppId::Boot);
     let app_host = APP_HOST.init(embassy_sync::mutex::Mutex::new(app_host));
@@ -153,6 +152,7 @@ async fn main(spawner: Spawner) {
         }
         drop(app_host_guard);
         runtime_driver.leds_task();
+        usb::poll();
 
         if let Some(event) = usb::dequeue_midi_event() {
             let mut app_host_guard = app_host.lock().await;

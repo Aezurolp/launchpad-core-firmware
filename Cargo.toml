@@ -50,7 +50,6 @@ embassy-futures = { version = "0.1.2", optional = true }
 embassy-stm32 = { version = "0.6.0", optional = true, features = ["time-driver-tim4", "exti"] }
 embassy-sync = { version = "0.8.0", optional = true }
 embassy-time = { version = "0.5.1", optional = true, features = ["tick-hz-32_768"] }
-embassy-usb = { version = "0.6.0", optional = true }
 embedded-hal = { version = "0.2.7", optional = true }
 embedded-hal-nb = { version = "1.0.0", optional = true }
 embedded-storage = { version = "0.3.1", optional = true }
@@ -76,7 +75,6 @@ launchpad-x = [
   "embassy-stm32/stm32f401re",
   "dep:embassy-sync",
   "dep:embassy-time",
-  "dep:embassy-usb",
   "dep:embedded-storage",
   "dep:heapless",
   "dep:spi-memory",
@@ -96,7 +94,6 @@ launchpad-mini-mk3 = [
   "embassy-stm32/stm32f401re",
   "dep:embassy-sync",
   "dep:embassy-time",
-  "dep:embassy-usb",
   "dep:embedded-storage",
   "dep:heapless",
   "dep:spi-memory",
@@ -118,6 +115,8 @@ launchpad-mk2 = [
   "dep:embassy-time",
   "dep:heapless",
   "dep:static_cell",
+  "dep:stm32-metapac",
+  "stm32-metapac/stm32f103rb",
   "cortex-m-rt/set-sp",
   "cortex-m-rt/set-vtor",
 ]
@@ -152,7 +151,6 @@ launchpad-pro-mk3 = [
   "embassy-stm32/stm32f745ve",
   "dep:embassy-sync",
   "dep:embassy-time",
-  "dep:embassy-usb",
   "dep:embedded-hal",
   "dep:embedded-hal-nb",
   "dep:embedded-storage",

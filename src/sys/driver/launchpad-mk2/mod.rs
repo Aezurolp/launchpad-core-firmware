@@ -106,6 +106,8 @@ async fn main(spawner: Spawner) {
             }
         }
 
+        usb::poll();
+
         while let Some(event) = usb::dequeue_midi_event() {
             app_host_guard.route_midi_event(event);
         }
