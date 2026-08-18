@@ -125,21 +125,25 @@ impl LedStateSlot {
 static LED_STATE: LedStateSlot = LedStateSlot::new();
 
 // Set now cares about orientation. This will not break the setup menu.
+#[inline(never)]
 pub fn set(index: u8, color: u32) {
     set_raw(rotation::to_raw(index), color);
 }
 
 // Same set but if you want to not mess with the orientation and light up a button regardless.
+#[inline(never)]
 pub fn set_raw(index: u8, color: u32) {
     update_base(index, LedColor::rgb8(color));
     driver::set_led(index, color);
 }
 
 // Same as the above two but for rgb
+#[inline(never)]
 pub fn set_rgb(index: u8, r: u8, g: u8, b: u8) {
     set_rgb_raw(rotation::to_raw(index), r, g, b);
 }
 
+#[inline(never)]
 pub fn set_rgb_raw(index: u8, r: u8, g: u8, b: u8) {
     update_base(index, LedColor::raw6(r, g, b));
     driver::set_rgb_led(index, r, g, b);
@@ -149,6 +153,7 @@ pub fn set_palette(index: u8, velocity: u8) {
     set_palette_raw(rotation::to_raw(index), velocity);
 }
 
+#[inline(never)]
 pub fn set_palette_raw(index: u8, velocity: u8) {
     #[cfg(feature = "rgb-color")]
     let (r, g, b) = settings::with(|settings| match settings.palette {
@@ -179,6 +184,7 @@ pub fn novation(index: u8, velocity: u8) {
     novation_raw(rotation::to_raw(index), velocity);
 }
 
+#[inline(never)]
 pub fn novation_raw(index: u8, velocity: u8) {
     #[cfg(feature = "rgb-color")]
     let (r, g, b) = PALETTE_NOVATION.rgb(velocity);

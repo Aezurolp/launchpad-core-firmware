@@ -13,6 +13,7 @@ pub mod version_inquiry;
 use crate::app::AppId;
 use crate::sys::midi::MidiPort;
 
+#[inline(never)]
 pub fn execute(app: AppId, port: MidiPort, data: &[u8]) -> bool {
     #[cfg(feature = "launchpad-pro-mk3")]
     if roadrunner::execute(app, port, data) {

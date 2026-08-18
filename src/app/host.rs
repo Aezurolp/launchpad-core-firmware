@@ -74,6 +74,7 @@ impl AppHost {
         self.apply_requested_app_switch();
     }
 
+    #[inline(never)]
     pub fn switch(&mut self, app: AppId) {
         if app == self.current {
             return;
@@ -96,6 +97,7 @@ impl AppHost {
         self.active_app_mut().on_enter();
     }
 
+    #[inline(never)]
     pub fn route_surface_event(&mut self, event: SurfaceEvent) {
         if event.index != 0 {
             let mut canonical_event = event;
@@ -127,6 +129,7 @@ impl AppHost {
         }
     }
 
+    #[inline(never)]
     pub fn route_midi_event(&mut self, event: MidiEvent) {
         if event.port == MidiPort::Daw {
             return;
@@ -140,6 +143,7 @@ impl AppHost {
         self.apply_requested_app_switch();
     }
 
+    #[inline(never)]
     pub fn route_aftertouch_event(&mut self, event: AftertouchEvent) {
         let mut canonical_event = event;
         canonical_event.index = self.to_canonical_index(event.index);
@@ -148,6 +152,7 @@ impl AppHost {
         self.apply_requested_app_switch();
     }
 
+    #[inline(never)]
     pub fn receive_sysex(&mut self, port: MidiPort, data: &[u8]) {
         if port == MidiPort::Daw {
             return;
@@ -168,6 +173,7 @@ impl AppHost {
         }
     }
 
+    #[inline(never)]
     pub fn route_tick_event(&mut self) {
         #[cfg(feature = "no-setup-btn")]
         self.tick_setup_hold_button();

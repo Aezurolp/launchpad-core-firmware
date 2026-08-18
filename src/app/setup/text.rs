@@ -25,22 +25,20 @@ impl Text {
         }
     }
 
-    pub fn draw(&mut self) {
-        for y in 0..4 {
-            for x in 0..8 {
-                let pos: u8 = 88 - (y * 10);
-                let shape_active = self.line_mask[y as usize] & (1 << x) != 0;
-                let use_primary = self.color_mask & (1 << x) != 0;
-
-                if !shape_active {
+    #[inline(never)]
+    pub fn draw(&self) {
+        for (y, &line) in self.line_mask.iter().enumerate() {
+            let base_pos = 88 - (y as u8 * 10);
+            for x in 0..8u8 {
+                if (line & (1 << x)) == 0 {
                     continue;
                 }
-
-                if use_primary {
-                    led::set(pos - x, self.primary_color)
+                let color = if (self.color_mask & (1 << x)) != 0 {
+                    self.primary_color
                 } else {
-                    led::set(pos - x, self.secondary_color)
-                }
+                    self.secondary_color
+                };
+                led::set(base_pos - x, color);
             }
         }
     }
