@@ -153,14 +153,18 @@ impl AppHost {
             return;
         }
 
-        if let Some(app) = modes::switch_target(data) {
-            self.switch(app);
-            return;
+        if self.current != AppId::Boot {
+            if let Some(app) = modes::switch_target(data) {
+                self.switch(app);
+                return;
+            }
         }
 
         sysex::execute(self.current, port, data);
-        if let Some(app) = sysex::take_requested_app_switch() {
-            self.switch(app);
+        if self.current != AppId::Boot {
+            if let Some(app) = sysex::take_requested_app_switch() {
+                self.switch(app);
+            }
         }
     }
 

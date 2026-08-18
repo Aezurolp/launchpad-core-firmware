@@ -43,22 +43,74 @@ def parse_bin(bin_path):
     with open(bin_path, 'rb') as f:
         data = f.read()
 
-    end_tick, num_frames, num_changes = struct.unpack('<HHI', data[:8])
-    offset = 8
-
+    end_tick, num_frames = struct.unpack('<HH', data[:4])
+    offset = 4
     frames = []
-    for _ in range(num_frames):
-        tick, count, _pad = struct.unpack('<HBB', data[offset:offset+4])
-        frames.append((tick, count))
-        offset += 4
-
     changes = []
-    for _ in range(num_changes):
-        led, vel = struct.unpack('<BB', data[offset:offset+2])
-        changes.append((led, vel))
-        offset += 2
+
+    for _ in range(num_frames):
+        tick, num_groups = struct.unpack('<HB', data[offset:offset+3])
+        offset += 3
+        frame_count = 0
+        for _ in range(num_groups):
+            vel, count = struct.unpack('<BB', data[offset:offset+2])
+            offset += 2
+            if count & 0x80:
+                mask_len = count & 0x7F
+                mask = data[offset:offset+mask_len]
+                offset += mask_len
+                for byte_idx in range(mask_len):
+                    b = mask[byte_idx]
+                    for bit in range(8):
+                        if (b & (1 << bit)) != 0:
+                            changes.append((byte_idx * 8 + bit, vel))
+                            frame_count += 1
+            else:
+                leds = data[offset:offset+count]
+                offset += count
+                for l in leds:
+                    changes.append((l, vel))
+                    frame_count += 1
+        frames.append((tick, frame_count))
 
     return end_tick, frames, changes
+
+def pack_bin(end_tick, frames, changes):
+    buf = bytearray()
+    buf.extend(struct.pack('<HH', end_tick, len(frames)))
+    change_idx = 0
+    for tick, count in frames:
+        frame_changes = changes[change_idx:change_idx+count]
+        change_idx += count
+        groups = {}
+        for l, v in frame_changes:
+            groups.setdefault(v, []).append(l)
+
+        # Process velocity 0 first, then remaining velocities
+        ordered_vels = []
+        if 0 in groups:
+            ordered_vels.append(0)
+        for v in groups:
+            if v != 0:
+                ordered_vels.append(v)
+
+        buf.extend(struct.pack('<HB', tick, len(ordered_vels)))
+        for v in ordered_vels:
+            leds = groups[v]
+            max_note = max(leds) if leds else 0
+            mask_len = (max_note // 8) + 1
+            if len(leds) > mask_len:
+                mask = bytearray(mask_len)
+                for l in leds:
+                    if l < 128:
+                        mask[l // 8] |= (1 << (l % 8))
+                buf.extend(struct.pack('<BB', v, 0x80 | mask_len))
+                buf.extend(mask)
+            else:
+                buf.extend(struct.pack('<BB', v, len(leds)))
+                buf.extend(bytes(leds))
+
+    return buf
 
 def parse_midi(midi_path):
     with open(midi_path, 'rb') as f:
@@ -111,8 +163,8 @@ def parse_midi(midi_path):
                 if event_type == 0x80:
                     vel = 0
                 if abs_tick_ms not in events_by_tick:
-                    events_by_tick[abs_tick_ms] = []
-                events_by_tick[abs_tick_ms].append((note, vel))
+                    events_by_tick[abs_tick_ms] = {}
+                events_by_tick[abs_tick_ms][note] = vel
             elif event_type in (0xA0, 0xB0, 0xE0):
                 offset += 2
             elif event_type in (0xC0, 0xD0):
@@ -135,25 +187,17 @@ def parse_midi(midi_path):
     changes = []
 
     for t in sorted_ticks:
-        evs = events_by_tick[t]
-        frames.append((t, len(evs)))
-        for note, vel in evs:
+        notes_dict = events_by_tick[t]
+        if not notes_dict:
+            continue
+        frames.append((t, len(notes_dict)))
+        for note, vel in notes_dict.items():
             changes.append((note, vel))
 
     end_tick = end_of_track_ms if end_of_track_ms > max_tick_ms else (max_tick_ms + 500)
     return end_tick, frames, changes
 
-def pack_bin(end_tick, frames, changes):
-    buf = bytearray()
-    buf.extend(struct.pack('<HHI', end_tick, len(frames), len(changes)))
 
-    for tick, count in frames:
-        buf.extend(struct.pack('<HBB', tick, count, 0))
-
-    for led, vel in changes:
-        buf.extend(struct.pack('<BB', led, vel))
-
-    return buf
 
 def unpack_midi(end_tick, frames, changes):
     track_bytes = bytearray()
