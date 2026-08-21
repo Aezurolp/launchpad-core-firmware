@@ -66,7 +66,7 @@ impl App for ProgrammerApp {
     fn on_aftertouch(&mut self, event: AftertouchEvent) {
         match settings::with(|s| s.aftertouch_mode) {
             1 => driver::send_midi(MidiPort::Midi, &[0xa0, event.index, event.value]),
-            2 => driver::send_midi(MidiPort::Midi, &[0xd0, event.index, event.value]),
+            2 => driver::send_midi(MidiPort::Midi, &[0xd0, event.value]),
             _ => {}
         }
     }

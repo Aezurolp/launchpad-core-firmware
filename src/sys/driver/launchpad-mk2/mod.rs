@@ -78,6 +78,11 @@ async fn main(spawner: Spawner) {
         ticker.next().await;
 
         let mut app_host_guard = app_host.lock().await;
+
+        while let Some(event) = usb::dequeue_midi_event() {
+            app_host_guard.route_midi_event(event);
+        }
+
         app_host_guard.route_tick_event();
 
         while let Some(event) = grid.poll_event() {
@@ -105,12 +110,6 @@ async fn main(spawner: Spawner) {
                     });
                 }
             }
-        }
-
-        usb::poll();
-
-        while let Some(event) = usb::dequeue_midi_event() {
-            app_host_guard.route_midi_event(event);
         }
 
         while let Some(message) = usb::dequeue_sysex_message() {

@@ -15,7 +15,7 @@ use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
 use embassy_stm32::interrupt::InterruptExt;
 use embassy_stm32::rcc::*;
 use embassy_stm32::{Peri, peripherals};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Ticker};
 use crate::app::{AftertouchEvent, AppHost, AppId, SurfaceEvent};
@@ -25,8 +25,7 @@ use static_cell::StaticCell;
 use stm32_metapac as pac;
 
 const APP_VECTOR_TABLE: u32 = 0x0800_6400;
-
-type SharedAppHost = Mutex<CriticalSectionRawMutex, AppHost>;
+type SharedAppHost = Mutex<ThreadModeRawMutex, AppHost>;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -96,6 +95,13 @@ async fn main(_spawner: Spawner) {
 
         let mut app_host_guard = app_host.lock().await;
 
+        // USB RX is serviced by the PMA interrupt.  Keep MIDI ahead of the
+        // surface-event drain so a host note-on/note-off pair is not delayed
+        // behind a burst of local pad/aftertouch events.
+        while let Some(event) = usb::dequeue_midi_event() {
+            app_host_guard.route_midi_event(event);
+        }
+
         app_host_guard.route_tick_event();
 
         while let Some(event) = grid.poll_event() {
@@ -118,12 +124,6 @@ async fn main(_spawner: Spawner) {
                     app_host_guard.route_aftertouch_event(AftertouchEvent { index, value });
                 }
             }
-        }
-
-        usb::poll();
-
-        while let Some(event) = usb::dequeue_midi_event() {
-            app_host_guard.route_midi_event(event);
         }
 
         while let Some(message) = usb::dequeue_sysex_message() {

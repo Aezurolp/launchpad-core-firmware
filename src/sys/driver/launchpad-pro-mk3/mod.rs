@@ -141,20 +141,6 @@ async fn main(_spawner: Spawner) {
     loop {
         ticker.next().await;
 
-        let mut app_host_guard = app_host.lock().await;
-        app_host_guard.route_tick_event();
-
-        let now = embassy_time::Instant::now();
-        if now.duration_since(last_m0_poll).as_millis() >= 1 {
-            last_m0_poll = now;
-            if let Some(event) = runtime_driver.poll() {
-                app_host_guard.route_surface_event(event);
-            }
-        }
-        drop(app_host_guard);
-        runtime_driver.leds_task();
-        usb::poll();
-
         if let Some(event) = usb::dequeue_midi_event() {
             let mut app_host_guard = app_host.lock().await;
             app_host_guard.route_midi_event(event);
@@ -162,6 +148,25 @@ async fn main(_spawner: Spawner) {
                 app_host_guard.route_midi_event(event);
             }
         }
+
+        runtime_driver.leds_task();
+
+        let m0_event = {
+            let now = embassy_time::Instant::now();
+            if now.duration_since(last_m0_poll).as_millis() >= 1 {
+                last_m0_poll = now;
+                runtime_driver.poll()
+            } else {
+                None
+            }
+        };
+
+        let mut app_host_guard = app_host.lock().await;
+        app_host_guard.route_tick_event();
+        if let Some(event) = m0_event {
+            app_host_guard.route_surface_event(event);
+        }
+        drop(app_host_guard);
         runtime_driver.leds_task();
 
         if let Some(message) = usb::dequeue_sysex_message() {
@@ -183,5 +188,4 @@ fn enable_cpu_caches() {
         peripherals.SCB.enable_dcache(&mut peripherals.CPUID);
     }
 }
-
 

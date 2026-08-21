@@ -5,8 +5,8 @@ use core::cell::UnsafeCell;
 use crate::app::MidiEvent;
 use super::midi::{SysexMessage, UsbMidiPacket};
 
-pub const MIDI_RX_QUEUE_SIZE: usize = 128;
-pub const SYSEX_RX_QUEUE_SIZE: usize = 4;
+pub const MIDI_RX_QUEUE_SIZE: usize = 1025;
+pub const SYSEX_RX_QUEUE_SIZE: usize = 5;
 pub const MIDI_TX_QUEUE_SIZE: usize = 64;
 
 pub struct Ring<T, const N: usize> {
@@ -24,8 +24,19 @@ impl<T: Copy, const N: usize> Ring<T, N> {
         }
     }
 
+    #[inline(always)]
+    fn next_index(index: usize) -> usize {
+        let next = index + 1;
+        if next == N {
+            0
+        } else {
+            next
+        }
+    }
+
+    #[inline(always)]
     pub fn push(&mut self, item: T) -> bool {
-        let next = (self.head + 1) % N;
+        let next = Self::next_index(self.head);
         if next == self.tail {
             return false;
         }
@@ -39,7 +50,7 @@ impl<T: Copy, const N: usize> Ring<T, N> {
             return None;
         }
         let item = self.buffer[self.tail];
-        self.tail = (self.tail + 1) % N;
+        self.tail = Self::next_index(self.tail);
         Some(item)
     }
 

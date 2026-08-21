@@ -58,6 +58,12 @@ fn main() -> ! {
     }
 
     loop {
+        while let Some(event) = usb::dequeue_midi_event() {
+            unsafe {
+                (&mut *core::ptr::addr_of_mut!(APP_HOST)).route_midi_event(event);
+            }
+        }
+
         cortex_m::interrupt::free(|_| unsafe {
             while let Some(event) = (&mut *core::ptr::addr_of_mut!(SURFACE)).poll_event() {
                 let event = match event {
@@ -75,14 +81,6 @@ fn main() -> ! {
                 (&mut *core::ptr::addr_of_mut!(APP_HOST)).route_surface_event(event);
             }
         });
-
-        usb::poll();
-
-        while let Some(event) = usb::dequeue_midi_event() {
-            unsafe {
-                (&mut *core::ptr::addr_of_mut!(APP_HOST)).route_midi_event(event);
-            }
-        }
 
         if hw::take_events(hw::EVENT_1KHZ) != 0 {
             unsafe {

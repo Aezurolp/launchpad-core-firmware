@@ -144,7 +144,7 @@ impl App for PerformanceApp {
 
         match settings::with(|settings| settings.aftertouch_mode) {
             1 => driver::send_midi(MidiPort::Midi, &[0xa0, note, event.value]),
-            2 => driver::send_midi(MidiPort::Midi, &[0xd0, note, event.value]),
+            2 => driver::send_midi(MidiPort::Midi, &[0xd0, event.value]),
             _ => {}
         }
     }

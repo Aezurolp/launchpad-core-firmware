@@ -50,17 +50,19 @@ pub fn enqueue_tx_message(port: u8, data: &[u8]) -> Result<(), ()> {
     let mut temp = [UsbMidiPacket::empty(); midi::MIDI_TX_MAX_PACKET_COUNT];
     let count = midi::encode_usb_midi_packets(port, data, &mut temp)?;
 
-    let q = queues();
-    if q.midi_tx.free_space() < count {
-        return Err(());
-    }
-
-    for packet in temp.iter().take(count) {
-        if !q.midi_tx.push(*packet) {
+    cortex_m::interrupt::free(|_| {
+        let q = queues();
+        if q.midi_tx.free_space() < count {
             return Err(());
         }
-    }
 
-    hardware::pump_tx();
-    Ok(())
+        for packet in temp.iter().take(count) {
+            if !q.midi_tx.push(*packet) {
+                return Err(());
+            }
+        }
+
+        hardware::pump_tx();
+        Ok(())
+    })
 }

@@ -19,3 +19,38 @@ pub const LED_REMAP: [u8; LED_REMAP_SIZE] = [
     92, 6, 7, 8, 31, 32, 58, 59, 87, 88, 89, 3, 4, 5, 29, 30, 56, 57, 84, 85, 86, 0, 1, 2, 27, 28,
     54, 55, 81, 82, 83, 0xFF, 25, 47, 48, 49, 74, 75, 76, 106, 0xFF,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_exposed_physical_control_has_one_unique_logical_index() {
+        let mut seen = [false; 109];
+        for (control, &mapped) in BUTTON_REMAP.iter().enumerate() {
+            let logical = if mapped != 0 {
+                Some(mapped as usize)
+            } else if control == 78 {
+                Some(0)
+            } else {
+                None
+            };
+
+            if let Some(logical) = logical {
+                assert!(logical < seen.len());
+                assert!(!seen[logical], "logical index {logical} is mapped twice");
+                seen[logical] = true;
+            }
+        }
+
+        for (logical, mapped) in seen.into_iter().enumerate() {
+            // XY index 9 is outside the 8-column surface. Indexes 99 and 100
+            // are likewise sentinels between the regular and mirror ranges.
+            let expected = logical != 9 && logical != 99 && logical != 100;
+            assert_eq!(
+                mapped, expected,
+                "unexpected mapping for logical index {logical}"
+            );
+        }
+    }
+}

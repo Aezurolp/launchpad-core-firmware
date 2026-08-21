@@ -10,9 +10,7 @@ pub const CAP_M0_STATUS: u16 = 1 << 2;
 pub const CAP_M0_FLASH: u16 = 1 << 3;
 pub const CAP_M0_STATS: u16 = 1 << 4;
 
-const CAPABILITY_QUERY: [u8; 9] = [
-    0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x02, 0x01, 0xf7,
-];
+const CAPABILITY_QUERY: [u8; 9] = [0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x02, 0x01, 0xf7];
 
 #[cfg(feature = "launchpad-pro-mk3")]
 const BUILD_CAPABILITIES: u16 =
@@ -108,10 +106,10 @@ mod tests {
     #[test]
     fn capability_response_schema_1_wire_shape() {
         assert_eq!(
-            capability_response(0x0e, [1, 2, 3], CAP_PALETTE | CAP_FASTLED),
+            capability_response(0x23, [1, 2, 3], CAP_PALETTE | CAP_FASTLED),
             [
-                0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x03, 0x01, 0x0e, 0x01, 0x02,
-                0x03, 0x03, 0x00, 0xf7,
+                0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x03, 0x01, 0x23, 0x01, 0x02, 0x03, 0x03, 0x00,
+                0xf7,
             ]
         );
     }
@@ -121,9 +119,24 @@ mod tests {
         assert_eq!(
             capability_response(0xff, [0xff, 0x80, 0x81], 0x01ff),
             [
-                0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x03, 0x01, 0x7f, 0x7f, 0x00,
-                0x01, 0x7f, 0x03, 0xf7,
+                0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x03, 0x01, 0x7f, 0x7f, 0x00, 0x01, 0x7f, 0x03,
+                0xf7,
             ]
         );
+    }
+
+    #[cfg(feature = "launchpad-pro-mk3")]
+    #[test]
+    fn pro_mk3_advertises_all_supported_capabilities() {
+        assert_eq!(
+            BUILD_CAPABILITIES,
+            CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_FLASH | CAP_M0_STATS
+        );
+    }
+
+    #[cfg(not(feature = "launchpad-pro-mk3"))]
+    #[test]
+    fn non_pro_mk3_builds_advertise_only_common_capabilities() {
+        assert_eq!(BUILD_CAPABILITIES, CAP_PALETTE | CAP_FASTLED);
     }
 }
