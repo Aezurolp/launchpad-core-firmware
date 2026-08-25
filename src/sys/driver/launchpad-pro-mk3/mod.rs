@@ -120,12 +120,7 @@ async fn main(_spawner: Spawner) {
         embassy_time::Timer::after_millis(1).await;
     }
     if runtime_driver.is_ready() && initial_m0_firmware.kind != runtime::M0_FW_ROADRUNNER {
-        let _ = runtime_driver.refresh_m0_firmware_status();
-        let m0_restart = embassy_time::Instant::now();
-        while !runtime_driver.is_ready() && m0_restart.elapsed().as_millis() < 1500 {
-            let _ = runtime_driver.poll();
-            embassy_time::Timer::after_millis(1).await;
-        }
+        runtime_driver.confirm_legacy_m0_firmware();
     }
 
     usb::init_event_queues();
