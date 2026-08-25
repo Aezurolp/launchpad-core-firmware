@@ -11,6 +11,9 @@ use embedded_hal_nb::nb;
 use embedded_hal_nb::serial::Read;
 
 use crate::sys::driver::common::storage::ExtFlash;
+use super::input_filter::{
+    M0InputFilter, PAD_COUNT as M0_PAD_COUNT, PAD_PRESS_THRESHOLD as M0_PAD_PRESS_THRESHOLD,
+};
 use super::led::LedSystem;
 use super::map::{BUTTON_REMAP, BUTTON_REMAP_SIZE, LED_REMAP_SIZE};
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
@@ -35,7 +38,6 @@ const M0_LED_TX_WINDOW_SLOTS: u8 = 32;
 const M0_BTN_STALL_RESTART_MS: u64 = 300;
 const M0_BTN_RX_TIMEOUT_FAST_MS: u64 = 5;
 const M0_BTN_RX_TIMEOUT_SLOW_MS: u64 = 20;
-const M0_PAD_COUNT: usize = 64;
 const M0_SIDE_BYTES: usize = 8;
 const M0_SIDE_COUNT: usize = M0_SIDE_BYTES * 8;
 const M0_BTN_DATA_OFFSET: usize = 4;
@@ -43,8 +45,6 @@ const M0_BTN_DIGITAL_OFFSET: usize = 0x84;
 const M0_SIDE_AUX_BYTE_INDEX: usize = 1;
 const M0_SIDE_SETUP_BIT: u8 = 0x40;
 const M0_SIDE_SHIFT_BIT: u8 = 0x80;
-const M0_PAD_PRESS_THRESHOLD: u16 = 0x0081;
-const M0_PAD_RELEASE_THRESHOLD: u16 = 0x0008;
 const M0_PAD_MAX_VALUE: u16 = 0x0c40;
 const M0_TX_FAIL_RESET_THRESHOLD: u8 = 4;
 const M0_LED_BRIGHTNESS_RAW: [u8; 8] = [0, 36, 72, 109, 145, 182, 218, 255];
@@ -58,13 +58,9 @@ const M0_ROM_SYNC: u8 = 0x7f;
 const M0_ROM_CMD_GET: u8 = 0x00;
 const M0_ROM_CMD_GET_ID: u8 = 0x02;
 const M0_ROM_CMD_READ_MEMORY: u8 = 0x11;
-const M0_ROM_CMD_WRITE_MEMORY: u8 = 0x31;
-const M0_ROM_CMD_ERASE: u8 = 0x43;
-const M0_ROM_CMD_EXTENDED_ERASE: u8 = 0x44;
 const M0_ROM_FLASH_BASE: u32 = 0x0800_0000;
 const M0_ROM_BLID_ADDR: u32 = 0x1fff_f7a6;
 const M0_ROM_ACK_TIMEOUT_MS: u64 = 100;
-const M0_ROM_ERASE_TIMEOUT_MS: u64 = 10_000;
 const M0_ROM_READ_TIMEOUT_MS: u64 = 250;
 const M0_ROM_MAX_LEN: usize = 256;
 const UART5_PCLK_HZ: u32 = 54_000_000;
@@ -284,41 +280,6 @@ impl Driver for RuntimeDriver {
         Some(self.link.roadrunner_stats_inquiry(100))
     }
 
-    fn m0_force_rom_probe(&mut self) -> u8 {
-        let probe = self.link.force_rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-        self.link.rom_mass_erase()
-    }
-
-    fn m0_rom_mass_erase(&mut self) -> u8 {
-        self.link.rom_mass_erase()
-    }
-
-    fn m0_rom_probe(&mut self) -> u8 {
-        self.link.rom_probe().status
-    }
-
-    fn m0_rom_write(&mut self, addr: u32, data: &[u8]) -> u8 {
-        let probe = self.link.rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-        self.link.rom_write(addr, data)
-    }
-
-    fn m0_rom_read(&mut self, addr: u32, data: &mut [u8]) -> u8 {
-        let probe = self.link.rom_probe();
-        if probe.status != M0_ROM_STATUS_OK {
-            return probe.status;
-        }
-        self.link.rom_read(addr, data)
-    }
-
-    fn m0_set_mode(&mut self, mode: u8) {
-        let _ = self.link.set_mode(mode);
-    }
 }
 
 pub struct M0Link {
@@ -341,6 +302,7 @@ pub struct M0Link {
     led_boost_enabled: u8,
     pub led_tx_slots: u8,
     link_ever_synced: bool,
+    input_filter: M0InputFilter,
     pad_pressed: [bool; M0_PAD_COUNT],
     side_pressed: [bool; M0_SIDE_COUNT],
     frame: M0ButtonFrame,
@@ -387,6 +349,7 @@ impl M0Link {
             led_brightness_raw: M0_LED_BRIGHTNESS_RAW[7],
             led_boost_enabled: 1,
             led_tx_slots: 0,
+            input_filter: M0InputFilter::new(),
             pad_pressed: [false; M0_PAD_COUNT],
             side_pressed: [false; M0_SIDE_COUNT],
             frame: M0ButtonFrame::new(),
@@ -421,6 +384,7 @@ impl M0Link {
         self.tx_fail_streak = 0;
         self.stream_miss_streak = 0;
         self.stream_warmup_frames = M0_STREAM_WARMUP_FRAMES;
+        self.input_filter.reset_stream();
         self.drain_rx();
 
         match mode {
@@ -636,45 +600,6 @@ impl M0Link {
         M0_ROM_STATUS_OK
     }
 
-    pub fn rom_write(&mut self, addr: u32, data: &[u8]) -> u8 {
-        if data.is_empty() || data.len() > M0_ROM_MAX_LEN {
-            return M0_ROM_STATUS_ARG;
-        }
-
-        let mut ack = 0;
-        let mut status = M0_ROM_STATUS_OK;
-        if !self.rom_cmd(M0_ROM_CMD_WRITE_MEMORY, &mut ack, &mut status) {
-            return status;
-        }
-
-        let addr_packet = [
-            (addr >> 24) as u8,
-            (addr >> 16) as u8,
-            (addr >> 8) as u8,
-            addr as u8,
-            rom_addr_xor(addr),
-        ];
-        if !self.rom_tx(&addr_packet) || !self.rom_wait_ack(&mut ack) {
-            return ack_status(ack, M0_ROM_STATUS_RX);
-        }
-
-        let mut tx_buf = [0u8; M0_ROM_MAX_LEN + 2];
-        let len = (data.len() - 1) as u8;
-        let mut checksum = len;
-        tx_buf[0] = len;
-        for (i, &byte) in data.iter().enumerate() {
-            tx_buf[i + 1] = byte;
-            checksum ^= byte;
-        }
-        tx_buf[data.len() + 1] = checksum;
-
-        if !self.rom_tx(&tx_buf[..data.len() + 2]) || !self.rom_wait_ack(&mut ack) {
-            return ack_status(ack, M0_ROM_STATUS_RX);
-        }
-
-        M0_ROM_STATUS_OK
-    }
-
     pub fn rom_get_commands(&mut self, data: &mut [u8]) -> Result<usize, u8> {
         if data.len() < M0_ROM_MAX_LEN {
             return Err(M0_ROM_STATUS_ARG);
@@ -703,36 +628,6 @@ impl M0Link {
         Ok(len)
     }
 
-    pub fn rom_mass_erase(&mut self) -> u8 {
-        let mut ack = 0;
-        let mut status = M0_ROM_STATUS_OK;
-        if self.rom_cmd(M0_ROM_CMD_ERASE, &mut ack, &mut status) {
-            if self.rom_tx(&[0xff, 0x00])
-                && self.rom_wait_ack_timeout(&mut ack, M0_ROM_ERASE_TIMEOUT_MS)
-            {
-                return M0_ROM_STATUS_OK;
-            }
-        }
-
-        let baud = self.active_baud;
-        let _ = self.rom_enter(baud, &mut ack);
-        status = M0_ROM_STATUS_OK;
-        if self.rom_cmd(M0_ROM_CMD_EXTENDED_ERASE, &mut ack, &mut status) {
-            if self.rom_tx(&[0xff, 0xff, 0x00])
-                && self.rom_wait_ack_timeout(&mut ack, M0_ROM_ERASE_TIMEOUT_MS)
-            {
-                return M0_ROM_STATUS_OK;
-            }
-            status = ack_status(ack, M0_ROM_STATUS_RX);
-        }
-
-        if status == M0_ROM_STATUS_OK {
-            M0_ROM_STATUS_CMD
-        } else {
-            status
-        }
-    }
-
     fn try_handshake(&mut self) -> bool {
         const VARIANTS: [u32; 4] = [
             M0_UART_BAUD_FIRMWARE,
@@ -742,6 +637,7 @@ impl M0Link {
         ];
 
         self.stream_synced = false;
+        self.input_filter.reset_stream();
         self.active_baud = VARIANTS[self.variant_idx];
         let mut config = UartConfig::default();
         config.baudrate = self.active_baud;
@@ -914,6 +810,9 @@ impl M0Link {
             && self.frame.bytes[0] == M0_BTN_FRAME_SYNC
             && self.frame.bytes[1] == M0_BTN_FRAME_SYNC
         {
+            if !self.stream_synced {
+                self.input_filter.reset_stream();
+            }
             self.stream_synced = true;
             self.link_ever_synced = true;
             self.stream_miss_streak = 0;
@@ -924,7 +823,14 @@ impl M0Link {
             } else {
                 self.led_tx_slots = M0_LED_TX_WINDOW_SLOTS;
             }
-            return self.process_frame();
+            let frame_counter = u16::from_le_bytes([
+                self.frame.bytes[2],
+                self.frame.bytes[3],
+            ]);
+            if self.input_filter.accept_frame(frame_counter) {
+                return self.process_frame();
+            }
+            return None;
         }
 
         if self.stream_synced && self.stream_miss_streak < M0_STREAM_MISS_TOLERANCE {
@@ -949,13 +855,7 @@ impl M0Link {
             let off = M0_BTN_DATA_OFFSET + 2 * i;
             let raw = u16::from_le_bytes([self.frame.bytes[off], self.frame.bytes[off + 1]]);
             let was = self.pad_pressed[i];
-            let is = if !was && raw >= M0_PAD_PRESS_THRESHOLD {
-                true
-            } else if was && raw <= M0_PAD_RELEASE_THRESHOLD {
-                false
-            } else {
-                was
-            };
+            let is = self.input_filter.pad_state(i, was, raw);
 
             if is != was {
                 self.pad_pressed[i] = is;

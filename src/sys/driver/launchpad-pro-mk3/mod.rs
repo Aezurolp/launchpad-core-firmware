@@ -5,6 +5,7 @@
 
 use crate::sys::driver::common::storage::ExtFlash;
 
+mod input_filter;
 pub mod led;
 mod map;
 mod runtime;
@@ -188,4 +189,3 @@ fn enable_cpu_caches() {
         peripherals.SCB.enable_dcache(&mut peripherals.CPUID);
     }
 }
-

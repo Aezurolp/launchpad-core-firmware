@@ -38,14 +38,3 @@ pub fn execute(app: AppId, port: MidiPort, data: &[u8]) -> bool {
 
     false
 }
-
-pub fn take_requested_app_switch() -> Option<AppId> {
-    #[cfg(feature = "launchpad-pro-mk3")]
-    {
-        roadrunner::take_requested_app_switch()
-    }
-    #[cfg(not(feature = "launchpad-pro-mk3"))]
-    {
-        None
-    }
-}

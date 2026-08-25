@@ -7,14 +7,15 @@ use crate::sys::midi::MidiPort;
 pub const CAP_PALETTE: u16 = 1 << 0;
 pub const CAP_FASTLED: u16 = 1 << 1;
 pub const CAP_M0_STATUS: u16 = 1 << 2;
-pub const CAP_M0_FLASH: u16 = 1 << 3;
+// Bit 3 was the retired CoreFW M0 flashing path. Keep it reserved so the
+// remaining capability bits retain their published wire positions.
 pub const CAP_M0_STATS: u16 = 1 << 4;
 
 const CAPABILITY_QUERY: [u8; 9] = [0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x02, 0x01, 0xf7];
 
 #[cfg(feature = "launchpad-pro-mk3")]
 const BUILD_CAPABILITIES: u16 =
-    CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_FLASH | CAP_M0_STATS;
+    CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_STATS;
 
 #[cfg(not(feature = "launchpad-pro-mk3"))]
 const BUILD_CAPABILITIES: u16 = CAP_PALETTE | CAP_FASTLED;
@@ -130,7 +131,7 @@ mod tests {
     fn pro_mk3_advertises_all_supported_capabilities() {
         assert_eq!(
             BUILD_CAPABILITIES,
-            CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_FLASH | CAP_M0_STATS
+            CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_STATS
         );
     }
 

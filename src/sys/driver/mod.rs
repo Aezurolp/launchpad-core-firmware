@@ -139,28 +139,6 @@ pub trait Driver {
     fn roadrunner_stats(&mut self) -> Option<Option<RoadrunnerStats>> {
         None
     }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_force_rom_probe(&mut self) -> u8 {
-        6
-    }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_rom_mass_erase(&mut self) -> u8 {
-        6
-    }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_rom_probe(&mut self) -> u8 {
-        6
-    }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_rom_write(&mut self, _addr: u32, _data: &[u8]) -> u8 {
-        6
-    }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_rom_read(&mut self, _addr: u32, _data: &mut [u8]) -> u8 {
-        6
-    }
-    #[cfg(feature = "launchpad-pro-mk3")]
-    fn m0_set_mode(&mut self, _mode: u8) {}
 }
 
 struct DriverSlot {
@@ -275,34 +253,4 @@ pub fn flash_info() -> Option<FlashInfo> {
 #[cfg(feature = "launchpad-pro-mk3")]
 pub fn roadrunner_stats() -> Option<Option<RoadrunnerStats>> {
     with(|driver| driver.roadrunner_stats()).flatten()
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_force_rom_probe() -> u8 {
-    with(|driver| driver.m0_force_rom_probe()).unwrap_or(6)
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_rom_mass_erase() -> u8 {
-    with(|driver| driver.m0_rom_mass_erase()).unwrap_or(6)
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_rom_probe() -> u8 {
-    with(|driver| driver.m0_rom_probe()).unwrap_or(6)
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_rom_write(addr: u32, data: &[u8]) -> u8 {
-    with(|driver| driver.m0_rom_write(addr, data)).unwrap_or(6)
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_rom_read(addr: u32, data: &mut [u8]) -> u8 {
-    with(|driver| driver.m0_rom_read(addr, data)).unwrap_or(6)
-}
-
-#[cfg(feature = "launchpad-pro-mk3")]
-pub fn m0_set_mode(mode: u8) {
-    let _ = with(|driver| driver.m0_set_mode(mode));
 }

@@ -166,11 +166,6 @@ impl AppHost {
         }
 
         sysex::execute(self.current, port, data);
-        if self.current != AppId::Boot {
-            if let Some(app) = sysex::take_requested_app_switch() {
-                self.switch(app);
-            }
-        }
     }
 
     #[inline(never)]
