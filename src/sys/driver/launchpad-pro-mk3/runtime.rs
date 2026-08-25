@@ -193,6 +193,18 @@ impl RuntimeDriver {
         status
     }
 
+    pub fn confirm_legacy_m0_firmware(&mut self) {
+        let status = M0FirmwareStatus {
+            status: M0_ROM_STATUS_OK,
+            kind: M0_FW_LEGACY,
+            version_major: 0,
+            version_minor: 0,
+            version_patch: 0,
+            probe: M0ProbeResult::new(),
+        };
+        self.apply_m0_firmware_status(&status);
+    }
+
     fn apply_m0_firmware_status(&mut self, status: &M0FirmwareStatus) {
         self.m0_firmware_status = *status;
         match status.kind {
@@ -279,7 +291,6 @@ impl Driver for RuntimeDriver {
     fn roadrunner_stats(&mut self) -> Option<Option<RoadrunnerStats>> {
         Some(self.link.roadrunner_stats_inquiry(100))
     }
-
 }
 
 pub struct M0Link {

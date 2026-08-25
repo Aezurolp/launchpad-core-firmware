@@ -14,8 +14,7 @@ pub const CAP_M0_STATS: u16 = 1 << 4;
 const CAPABILITY_QUERY: [u8; 9] = [0xf0, 0x00, 0x20, 0x29, 0x02, 0x7f, 0x02, 0x01, 0xf7];
 
 #[cfg(feature = "launchpad-pro-mk3")]
-const BUILD_CAPABILITIES: u16 =
-    CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_STATS;
+const BUILD_CAPABILITIES: u16 = CAP_PALETTE | CAP_FASTLED | CAP_M0_STATUS | CAP_M0_STATS;
 
 #[cfg(not(feature = "launchpad-pro-mk3"))]
 const BUILD_CAPABILITIES: u16 = CAP_PALETTE | CAP_FASTLED;

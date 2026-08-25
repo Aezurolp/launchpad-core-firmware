@@ -147,6 +147,10 @@ fn append_hex32(resp: &mut [u8], idx: &mut usize, value: u32) {
 
 fn append_nibble(resp: &mut [u8], idx: &mut usize, value: u8) {
     let value = value & 0x0f;
-    resp[*idx] = if value < 10 { b'0' + value } else { b'A' + value - 10 };
+    resp[*idx] = if value < 10 {
+        b'0' + value
+    } else {
+        b'A' + value - 10
+    };
     *idx += 1;
 }
