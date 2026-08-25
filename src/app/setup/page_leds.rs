@@ -12,10 +12,24 @@ use crate::sys::settings;
 const BRIGHTNESS_START: u8 = 31;
 const BRIGHTNESS_END: u8 = 38;
 
+
+#[cfg(not(feature = "launchpad-pro-mk3"))]
 const ROTATION_DEFAULT_BUTTON: u8 = 91;
+#[cfg(not(feature = "launchpad-pro-mk3"))]
 const ROTATION_UPSIDE_DOWN: u8 = 92;
+#[cfg(not(feature = "launchpad-pro-mk3"))]
 const ROTATION_LEFT_BUTTON: u8 = 93;
+#[cfg(not(feature = "launchpad-pro-mk3"))]
 const ROTATION_RIGHT_BUTTON: u8 = 94;
+
+#[cfg(feature = "launchpad-pro-mk3")]
+const ROTATION_DEFAULT_BUTTON: u8 = 80;
+#[cfg(feature = "launchpad-pro-mk3")]
+const ROTATION_UPSIDE_DOWN: u8 = 70;
+#[cfg(feature = "launchpad-pro-mk3")]
+const ROTATION_LEFT_BUTTON: u8 = 91;
+#[cfg(feature = "launchpad-pro-mk3")]
+const ROTATION_RIGHT_BUTTON: u8 = 92;
 
 pub struct LedsPage {
     text: Text,
