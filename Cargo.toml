@@ -8,7 +8,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "1.1.0"
+version = "1.2.0"
 publish = false
 license = "GPL-3.0-only"
 authors = [
@@ -193,4 +193,3 @@ panic = "abort"
 [profile.dev]
 opt-level = "z"
 lto = "fat"
-
